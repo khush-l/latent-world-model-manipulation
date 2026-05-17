@@ -1,0 +1,33 @@
+FROM xingyu/softgym:latest
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    ffmpeg \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    pybind11-dev \
+    python3.6 \
+    python3.6-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN python3.6 -m pip install --upgrade \
+    "pip==21.3.1" \
+    "setuptools<60" \
+    wheel
+
+COPY docker/requirements-softgym-py36.txt /tmp/requirements-softgym-py36.txt
+RUN python3.6 -m pip install --use-deprecated=legacy-resolver -r /tmp/requirements-softgym-py36.txt
+RUN rm -rf /usr/include/pybind11 \
+  && cp -a /usr/local/include/python3.6/pybind11 /usr/include/pybind11
+
+RUN ln -sf /usr/bin/python3.6 /usr/local/bin/python \
+  && ln -sf /usr/bin/python3.6 /usr/local/bin/python3
+
+ENV PYTHONUNBUFFERED=1
