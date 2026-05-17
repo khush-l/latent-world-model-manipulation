@@ -1,0 +1,27 @@
+# Common local/generated artifacts
+data/
+__pycache__/
+.idea
+*.swp
+*.swo
+*.swn
+build/
+.vscode
+.cursor
+
+# Simulation artifacts
+simulation/softgym/cached_initial_states/*
+simulation/softgym/envs/corl_cached_state_backup
+simulation/PyFlex/demo/compiler/makelinux64/.deps
+simulation/PyFlex/examples/cmake-build-debug
+simulation/PyFlex/bindings/cmake-build-debug
+
+simulation/PyFlex/bindings/examples/tmp
+simulation/PyFlex/bindings/examples/*.avi
+simulation/PyFlex/bindings/examples/*/
+simulation/PyFlex/bindings/examples/*.gif
+
+# PyFlex binary outputs
+simulation/PyFlex/**/*.exp
+simulation/PyFlex/**/*.ilk
+simulation/PyFlex/**/*.apk
