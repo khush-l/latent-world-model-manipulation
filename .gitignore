@@ -5,11 +5,17 @@ __pycache__/
 *.swp
 *.swo
 *.swn
+core
+core.*
 build/
 .vscode
 .cursor
 
 # Simulation artifacts
+simulation/data/
+simulation/softagent/data/
+simulation/softagent/log/
+simulation/softagent/logs/
 simulation/softgym/cached_initial_states/*
 simulation/softgym/envs/corl_cached_state_backup
 simulation/PyFlex/demo/compiler/makelinux64/.deps

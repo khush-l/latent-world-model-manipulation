@@ -53,7 +53,7 @@ mkdir -p "$SIM_ROOT/data/trajectories"
 
 cmd=(
   python
-  data_collection/collect_trajectories.py
+  utils/collect_trajectories.py
   "${collector_args[@]}"
 )
 

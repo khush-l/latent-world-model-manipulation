@@ -12,7 +12,7 @@ Usage:
   docker/softgym-local.sh build
   docker/softgym-local.sh compile
   docker/softgym-local.sh example [EnvName]
-  docker/softgym-local.sh run "python examples/random_env.py --env_name ClothDrop --headless 1"
+  docker/softgym-local.sh run "python envs/random_env.py --env_name ClothDrop --headless 1"
   docker/softgym-local.sh shell
 
 Default example environment: ClothDrop
@@ -77,7 +77,7 @@ run_example() {
   mkdir -p "$REPO_ROOT/data"
   local quoted_env
   quoted_env=$(printf '%q' "$env_name")
-  run_container bash -lc "$pyflex_env; python examples/random_env.py --env_name $quoted_env --headless 1 --num_variations 1 --save_video_dir ./data"
+  run_container bash -lc "$pyflex_env; python envs/random_env.py --env_name $quoted_env --headless 1 --num_variations 1 --save_video_dir ./data"
 }
 
 case "${1:-}" in

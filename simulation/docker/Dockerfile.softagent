@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=softgym-local:py36-cuda92
+FROM ${BASE_IMAGE}
+
+COPY docker/requirements-softagent-py36.txt /tmp/requirements-softagent-py36.txt
+RUN python3.6 -m pip install --no-cache-dir --use-deprecated=legacy-resolver -r /tmp/requirements-softagent-py36.txt
+
+ENV PYTORCH_JIT=0
