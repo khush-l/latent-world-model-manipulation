@@ -17,7 +17,8 @@ void pyflex_init(bool headless=false, bool render=true, int camera_width=720, in
 
     g_headless = headless;
     g_render = render;
-    if (g_headless) {
+    const char* disableInterop = getenv("SOFTGYM_DISABLE_INTEROP");
+    if (g_headless || (disableInterop != nullptr && strcmp(disableInterop, "0") != 0)) {
         g_interop = false;
         g_pause = false;
     }
@@ -1138,7 +1139,7 @@ PYBIND11_MODULE(pyflex, m) {
     m.def("get_camera_params", &pyflex_get_camera_params, "Get camera parameters");
     m.def("set_camera_params", &pyflex_set_camera_params, "Set camera parameters");
 
-    m.def("add_box", &pyflex_add_box, 
+    m.def("add_box", &pyflex_add_box,
         py::arg("halfEdge_") = 0,
         py::arg("center_") = 0,
         py::arg("quat_") = 0,

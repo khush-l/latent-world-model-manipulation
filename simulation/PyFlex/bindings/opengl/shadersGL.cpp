@@ -722,7 +722,7 @@ void main()
 }
 );
 
-const char *passThroughShader = STRINGIFY(
+const char *passThroughShader = "#version 130\n" STRINGIFY(
 
 void main()
 {
@@ -732,7 +732,7 @@ void main()
 );
 
 // pixel shader for rendering points as shaded spheres
-const char *fragmentShader = STRINGIFY(
+const char *fragmentShader = "#version 130\n" STRINGIFY(
 
 uniform vec3 lightDir;
 uniform vec3 lightPos;
@@ -1425,7 +1425,10 @@ void main()
 //--------------------------------------------------------
 // Ellipsoid shaders
 //
-const char *vertexEllipsoidDepthShader = "#version 120\n" STRINGIFY(
+const char *vertexEllipsoidDepthShader =
+"#version 150 compatibility\n"
+"out vec4 vertexTexCoord[6];\n"
+STRINGIFY(
 
 // rotation matrix in xyz, scale in w
 attribute vec4 q1;
@@ -1499,7 +1502,7 @@ void main()
  	solveQuadratic(a2, b2, c2, ymin, ymax);
 
 	gl_Position = vec4(worldPos.xyz, 1.0);
-	gl_TexCoord[0] = vec4(xmin, xmax, ymin, ymax);
+	vertexTexCoord[0] = vec4(xmin, xmax, ymin, ymax);
 
 	// construct inverse quadric matrix (used for ray-casting in parameter space)
 	mat4 invq;
@@ -1515,26 +1518,28 @@ void main()
 	invq = invq*gl_ModelViewMatrixInverse;
 
 	// pass down
-	gl_TexCoord[1] = invq[0];
-	gl_TexCoord[2] = invq[1];
-	gl_TexCoord[3] = invq[2];
-	gl_TexCoord[4] = invq[3];
+	vertexTexCoord[1] = invq[0];
+	vertexTexCoord[2] = invq[1];
+	vertexTexCoord[3] = invq[2];
+	vertexTexCoord[4] = invq[3];
 
 	// compute ndc pos for frustrum culling in GS
 	vec4 ndcPos = gl_ModelViewProjectionMatrix * vec4(worldPos.xyz, 1.0);
-	gl_TexCoord[5] = ndcPos / ndcPos.w;
+	vertexTexCoord[5] = ndcPos / ndcPos.w;
 }
 );
 
 const char* geometryEllipsoidDepthShader =
-"#version 120\n"
-"#extension GL_EXT_geometry_shader4 : enable\n"
+"#version 150 compatibility\n"
+"layout(points) in;\n"
+"layout(triangle_strip, max_vertices = 4) out;\n"
+"in vec4 vertexTexCoord[][6];\n"
 STRINGIFY(
 void main()
 {
-	vec3 pos = gl_PositionIn[0].xyz;
-	vec4 bounds = gl_TexCoordIn[0][0];
-	vec4 ndcPos = gl_TexCoordIn[0][5];
+	vec3 pos = gl_in[0].gl_Position.xyz;
+	vec4 bounds = vertexTexCoord[0][0];
+	vec4 ndcPos = vertexTexCoord[0][5];
 
 	// frustrum culling
 	const float ndcBound = 1.0;
@@ -1549,10 +1554,10 @@ void main()
 	float ymax = bounds.w;
 
 	// inv quadric transform
-	gl_TexCoord[0] = gl_TexCoordIn[0][1];
-	gl_TexCoord[1] = gl_TexCoordIn[0][2];
-	gl_TexCoord[2] = gl_TexCoordIn[0][3];
-	gl_TexCoord[3] = gl_TexCoordIn[0][4];
+	gl_TexCoord[0] = vertexTexCoord[0][1];
+	gl_TexCoord[1] = vertexTexCoord[0][2];
+	gl_TexCoord[2] = vertexTexCoord[0][3];
+	gl_TexCoord[3] = vertexTexCoord[0][4];
 
 	gl_Position = vec4(xmin, ymax, 0.0, 1.0);
 	EmitVertex();
@@ -2490,7 +2495,10 @@ void RenderEllipsoids(FluidRenderer* render, FluidRenderBuffers* buffersIn, int 
 //------------------------------------------------------------------------------
 // Diffuse Shading
 
-const char *vertexDiffuseShader = STRINGIFY(
+const char *vertexDiffuseShader =
+"#version 150 compatibility\n"
+"out vec4 diffuseTexCoord[6];\n"
+STRINGIFY(
 
 uniform float pointRadius;  // point size in world space
 uniform float pointScale;   // scale to calculate size in pixels
@@ -2513,22 +2521,22 @@ void main()
     // calculate window-space point size
 	gl_PointSize = pointRadius * (pointScale / gl_Position.w);
 
-	gl_TexCoord[0] = gl_MultiTexCoord0;
-	gl_TexCoord[1] = vec4(worldPos, gl_Vertex.w);
-	gl_TexCoord[2] = eyePos;
+	diffuseTexCoord[0] = gl_MultiTexCoord0;
+	diffuseTexCoord[1] = vec4(worldPos, gl_Vertex.w);
+	diffuseTexCoord[2] = eyePos;
 
-	gl_TexCoord[3].xyz = gl_ModelViewMatrix*vec4(gl_MultiTexCoord1.xyz, 0.0);
-	gl_TexCoord[4].xyzw = color;
+	diffuseTexCoord[3].xyz = (gl_ModelViewMatrix*vec4(gl_MultiTexCoord1.xyz, 0.0)).xyz;
+	diffuseTexCoord[4].xyzw = color;
 
 	// hack to color different emitters
 	if (gl_MultiTexCoord1.w == 2.0)
-		gl_TexCoord[4].xyzw = vec4(0.85, 0.65, 0.65, color.w);
+		diffuseTexCoord[4].xyzw = vec4(0.85, 0.65, 0.65, color.w);
 	else if (gl_MultiTexCoord1.w == 1.0)
-		gl_TexCoord[4].xyzw = vec4(0.65, 0.85, 0.65, color.w);
+		diffuseTexCoord[4].xyzw = vec4(0.65, 0.85, 0.65, color.w);
 
 	// compute ndc pos for frustrum culling in GS
 	vec4 ndcPos = gl_ModelViewProjectionMatrix * vec4(worldPos.xyz, 1.0);
-	gl_TexCoord[5] = ndcPos / ndcPos.w;
+	diffuseTexCoord[5] = ndcPos / ndcPos.w;
 }
 );
 
@@ -2536,8 +2544,10 @@ void main()
 
 
 const char *geometryDiffuseShader =
-"#version 120\n"
-"#extension GL_EXT_geometry_shader4 : enable\n"
+"#version 150 compatibility\n"
+"layout(points) in;\n"
+"layout(triangle_strip, max_vertices = 4) out;\n"
+"in vec4 diffuseTexCoord[][6];\n"
 STRINGIFY(
 
 uniform float pointScale;  // point size in world space
@@ -2547,7 +2557,7 @@ uniform vec3 lightDir;
 
 void main()
 {
-	vec4 ndcPos = gl_TexCoordIn[0][5];
+	vec4 ndcPos = diffuseTexCoord[0][5];
 
 	// frustrum culling
 	const float ndcBound = 1.0;
@@ -2558,15 +2568,15 @@ void main()
 
 	float velocityScale = 1.0;
 
-	vec3 v = gl_TexCoordIn[0][3].xyz*velocityScale;
-	vec3 p = gl_TexCoordIn[0][2].xyz;
+	vec3 v = diffuseTexCoord[0][3].xyz*velocityScale;
+	vec3 p = diffuseTexCoord[0][2].xyz;
 
 	// billboard in eye space
 	vec3 u = vec3(0.0, pointScale, 0.0);
 	vec3 l = vec3(pointScale, 0.0, 0.0);
 
 	// increase size based on life
-	float lifeFade = mix(1.0f+diffusion, 1.0, min(1.0, gl_TexCoordIn[0][1].w*0.25f));
+	float lifeFade = mix(1.0f+diffusion, 1.0, min(1.0, diffuseTexCoord[0][1].w*0.25f));
 	u *= lifeFade;
 	l *= lifeFade;
 
@@ -2585,13 +2595,13 @@ void main()
 	}
 
 	{
-		gl_TexCoord[1] = gl_TexCoordIn[0][1];	// vertex world pos (life in w)
-		gl_TexCoord[2] = gl_TexCoordIn[0][2];	// vertex eye pos
-		gl_TexCoord[3] = gl_TexCoordIn[0][3];	// vertex velocity in view space
+		gl_TexCoord[1] = diffuseTexCoord[0][1];	// vertex world pos (life in w)
+		gl_TexCoord[2] = diffuseTexCoord[0][2];	// vertex eye pos
+		gl_TexCoord[3] = diffuseTexCoord[0][3];	// vertex velocity in view space
 		gl_TexCoord[3].w = fade;
 		gl_TexCoord[4] = gl_ModelViewMatrix*vec4(lightDir, 0.0);
-		gl_TexCoord[4].w = gl_TexCoordIn[0][3].w; // attenuation
-		gl_TexCoord[5].xyzw = gl_TexCoordIn[0][4].xyzw;	// color
+		gl_TexCoord[4].w = diffuseTexCoord[0][3].w; // attenuation
+		gl_TexCoord[5].xyzw = diffuseTexCoord[0][4].xyzw;	// color
 
 		float zbias = 0.0f;//0.00125*2.0;
 
