@@ -1,5 +1,6 @@
 # Common local/generated artifacts
 data/
+references/
 __pycache__/
 .idea
 *.swp

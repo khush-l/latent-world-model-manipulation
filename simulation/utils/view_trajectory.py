@@ -170,7 +170,8 @@ def normalize_depth(depth_frames, percentile):
 
 
 def export_frames(data, output_dir, indices, image_format, jpeg_quality, depth_percentile):
-    rgb = ensure_rgb_uint8(data["rgb"])
+    pixels_key = "pixels" if "pixels" in data.files else "rgb"
+    rgb = ensure_rgb_uint8(data[pixels_key])
     frame_dir = os.path.join(output_dir, "frames")
     os.makedirs(frame_dir, exist_ok=True)
 
@@ -233,12 +234,14 @@ def viewer_payload(data, indices, rgb_paths, depth_paths):
         key for key in data.files
         if key.startswith("info_") and np.asarray(data[key]).ndim <= 1
     )
+    action_key = "action" if "action" in data.files else "action_raw"
     payload = {
         "frame_indices": indices,
         "rgb_paths": rgb_paths,
         "depth_paths": depth_paths,
-        "action_raw": sampled_step_values(data, indices, "action_raw"),
-        "action_normalized": sampled_step_values(data, indices, "action_normalized"),
+        "action": sampled_step_values(data, indices, action_key),
+        "proprio": sampled_step_values(data, indices, "proprio", frame_aligned=True),
+        "state": sampled_step_values(data, indices, "state", frame_aligned=True),
         "reward": sampled_step_values(data, indices, "reward"),
         "done": sampled_step_values(data, indices, "done"),
         "info": {
@@ -459,8 +462,9 @@ def write_html(path, npz_path, metadata, summary, payload):
       addRow("transition", current === 0 ? "initial" : current - 1);
       addRow("reward", valueAt(DATA.reward, current));
       addRow("done", valueAt(DATA.done, current));
-      addRow("action_raw", valueAt(DATA.action_raw, current));
-      addRow("action_normalized", valueAt(DATA.action_normalized, current));
+      addRow("action", valueAt(DATA.action, current));
+      addRow("proprio", valueAt(DATA.proprio, current));
+      addRow("state", valueAt(DATA.state, current));
       Object.keys(DATA.info).forEach((key) => addRow(key, valueAt(DATA.info[key], current)));
     }
 
@@ -521,10 +525,11 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     data = np.load(npz_path, allow_pickle=True)
-    if "rgb" not in data.files:
-        raise RuntimeError("{} does not contain an 'rgb' array".format(npz_path))
+    pixels_key = "pixels" if "pixels" in data.files else ("rgb" if "rgb" in data.files else None)
+    if pixels_key is None:
+        raise RuntimeError("{} does not contain a 'pixels' or 'rgb' array".format(npz_path))
 
-    indices = select_indices(len(data["rgb"]), args.stride, args.max_frames)
+    indices = select_indices(len(data[pixels_key]), args.stride, args.max_frames)
     rgb_paths, depth_paths = export_frames(
         data,
         output_dir,
@@ -552,7 +557,7 @@ def main():
     )
 
     print("source:", npz_path)
-    print("frames:", len(data["rgb"]), "exported:", len(indices))
+    print("frames:", len(data[pixels_key]), "exported:", len(indices))
     print("viewer:", os.path.join(output_dir, "index.html"))
     print("summary:", os.path.join(output_dir, "summary.json"))
 

@@ -30,7 +30,9 @@ import pyflex  # noqa: E402
 
 
 STATE_ARRAY_KEYS = ("particle_pos", "particle_vel", "shape_pos", "phase")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
+STATE_DIM = 15  # see DATA_FORMAT.md §5
+GRIP_INDEX = 3  # action[:, 3] = grip per picker
 
 
 def parse_args():
@@ -56,7 +58,13 @@ def parse_args():
     parser.add_argument("--save-cached-states", action="store_true")
     parser.add_argument("--eval-split", action="store_true")
     parser.add_argument("--save-depth", action="store_true")
-    parser.add_argument("--save-state", action="store_true")
+    parser.add_argument(
+        "--save-full-state",
+        action="store_true",
+        help="Also dump variable-length particle/shape/phase arrays. "
+             "Used for MPC _set_state at eval time; not part of the LeWM "
+             "training table. See DATA_FORMAT.md §3.",
+    )
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
@@ -140,18 +148,52 @@ def render_rgb_depth(env, img_size, include_depth=False):
     return rgb, depth
 
 
-def sample_normalized_action(action_space):
+def sample_action(action_space):
     if not isinstance(action_space, gym.spaces.Box):
-        return action_space.sample(), action_space.sample()
-
-    action_norm = np.random.uniform(
-        low=-1.0, high=1.0, size=action_space.shape
-    ).astype(np.float32)
+        return action_space.sample().astype(np.float32)
     low = action_space.low.astype(np.float32)
     high = action_space.high.astype(np.float32)
+    action_norm = np.random.uniform(low=-1.0, high=1.0, size=action_space.shape).astype(np.float32)
     action_raw = low + (action_norm + 1.0) * 0.5 * (high - low)
-    action_raw = np.clip(action_raw, low, high).astype(np.float32)
-    return action_norm, action_raw
+    return np.clip(action_raw, low, high).astype(np.float32)
+
+
+def extract_proprio(env, num_picker):
+    """Picker xyz (per picker) + holding flag (0/1) → (4 * num_picker,) float32."""
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_xyz = shape_states[:num_picker, :3].astype(np.float32)
+    picked = getattr(env.action_tool, "picked_particles", [None] * num_picker)
+    holding = np.array(
+        [0.0 if picked[i] is None else 1.0 for i in range(num_picker)],
+        dtype=np.float32,
+    )
+    return np.concatenate([picker_xyz.reshape(-1), holding], axis=0).astype(np.float32)
+
+
+def extract_compact_state(num_picker):
+    """Fixed-dim privileged state — see DATA_FORMAT.md §5."""
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_xyz = shape_states[:num_picker, :3].astype(np.float32).reshape(-1)
+    if picker_xyz.shape[0] < 6:
+        picker_xyz = np.concatenate(
+            [picker_xyz, np.zeros(6 - picker_xyz.shape[0], dtype=np.float32)]
+        )
+    elif picker_xyz.shape[0] > 6:
+        picker_xyz = picker_xyz[:6]
+
+    particle_pos = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+    if particle_pos.size == 0:
+        com = np.zeros(3, dtype=np.float32)
+        bbox_min = np.zeros(3, dtype=np.float32)
+        bbox_max = np.zeros(3, dtype=np.float32)
+    else:
+        com = particle_pos.mean(axis=0)
+        bbox_min = particle_pos.min(axis=0)
+        bbox_max = particle_pos.max(axis=0)
+
+    state = np.concatenate([picker_xyz, com, bbox_min, bbox_max]).astype(np.float32)
+    assert state.shape == (STATE_DIM,), state.shape
+    return state
 
 
 def extract_state_arrays(env):
@@ -198,38 +240,46 @@ def collect_episode(env, args, episode_idx, env_kwargs):
     obs = env.reset()
     del obs
 
-    rgb_frames = []
+    num_picker = int(env_kwargs.get("num_picker", getattr(env.action_tool, "num_picker", 2)))
+    action_dim = 4 * num_picker
+    proprio_dim = 4 * num_picker
+
+    pixel_frames = []
     depth_frames = []
-    action_norms = []
-    action_raws = []
+    proprios = []
+    states = []
+    actions = []
     rewards = []
     dones = []
     info_buffers = {}
-    state_buffers = {}
+    full_state_buffers = {}
 
-    rgb, depth = render_rgb_depth(env, args.img_size, args.save_depth)
-    rgb_frames.append(rgb)
+    pixels, depth = render_rgb_depth(env, args.img_size, args.save_depth)
+    pixel_frames.append(pixels)
+    proprios.append(extract_proprio(env, num_picker))
+    states.append(extract_compact_state(num_picker))
     if args.save_depth:
         depth_frames.append(depth)
-    if args.save_state:
-        append_state(state_buffers, extract_state_arrays(env))
+    if args.save_full_state:
+        append_state(full_state_buffers, extract_state_arrays(env))
 
     for _ in range(env.horizon):
-        action_norm, action_raw = sample_normalized_action(env.action_space)
+        action_raw = sample_action(env.action_space)
         _, reward, done, info = env.step(action_raw)
 
-        action_norms.append(np.asarray(action_norm, dtype=np.float32).copy())
-        action_raws.append(np.asarray(action_raw, dtype=np.float32).copy())
+        actions.append(np.asarray(action_raw, dtype=np.float32).copy())
         rewards.append(float(reward))
         dones.append(bool(done))
         append_info(info_buffers, info)
 
-        rgb, depth = render_rgb_depth(env, args.img_size, args.save_depth)
-        rgb_frames.append(rgb)
+        pixels, depth = render_rgb_depth(env, args.img_size, args.save_depth)
+        pixel_frames.append(pixels)
+        proprios.append(extract_proprio(env, num_picker))
+        states.append(extract_compact_state(num_picker))
         if args.save_depth:
             depth_frames.append(depth)
-        if args.save_state:
-            append_state(state_buffers, extract_state_arrays(env))
+        if args.save_full_state:
+            append_state(full_state_buffers, extract_state_arrays(env))
 
         if done:
             break
@@ -250,22 +300,45 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "action_repeat": int(env.action_repeat),
         "horizon": int(env.horizon),
         "img_size": int(args.img_size),
+        "num_picker": int(num_picker),
+        "action_dim": int(action_dim),
+        "proprio_dim": int(proprio_dim),
+        "state_dim": int(STATE_DIM),
     }
 
+    pixels_arr = np.asarray(pixel_frames, dtype=np.uint8)
+    action_arr = np.asarray(actions, dtype=np.float32)
+    proprio_arr = np.asarray(proprios, dtype=np.float32)
+    state_arr = np.asarray(states, dtype=np.float32)
+    reward_arr = np.asarray(rewards, dtype=np.float32)
+    done_arr = np.asarray(dones, dtype=np.bool_)
+
+    # Length invariants — see DATA_FORMAT.md §8.
+    T = action_arr.shape[0]
+    assert pixels_arr.shape[0] == T + 1, (pixels_arr.shape, T)
+    assert proprio_arr.shape[0] == T + 1, (proprio_arr.shape, T)
+    assert state_arr.shape[0] == T + 1, (state_arr.shape, T)
+    assert reward_arr.shape[0] == T and done_arr.shape[0] == T
+    assert action_arr.shape[1] == action_dim, (action_arr.shape, action_dim)
+    assert proprio_arr.shape[1] == proprio_dim, (proprio_arr.shape, proprio_dim)
+    assert state_arr.shape[1] == STATE_DIM, state_arr.shape
+
     arrays = {
-        "rgb": np.asarray(rgb_frames, dtype=np.uint8),
-        "action_normalized": np.asarray(action_norms, dtype=np.float32),
-        "action_raw": np.asarray(action_raws, dtype=np.float32),
-        "reward": np.asarray(rewards, dtype=np.float32),
-        "done": np.asarray(dones, dtype=np.bool_),
+        "pixels": pixels_arr,
+        "action": action_arr,
+        "proprio": proprio_arr,
+        "state": state_arr,
+        "reward": reward_arr,
+        "done": done_arr,
         "metadata_json": np.asarray(json.dumps(metadata, sort_keys=True)),
     }
     if args.save_depth:
         arrays["depth"] = np.asarray(depth_frames, dtype=np.float32)
     for key, values in info_buffers.items():
         arrays["info_" + key] = np.asarray(values, dtype=np.float32)
-    if args.save_state:
-        arrays.update(stack_state_buffers(state_buffers))
+    if args.save_full_state:
+        for key, value in stack_state_buffers(full_state_buffers).items():
+            arrays["full_" + key] = value
 
     return arrays, metadata
 
@@ -310,7 +383,7 @@ def main():
             append_manifest(output_dir, metadata, path)
             print(
                 "saved {} steps to {}".format(
-                    arrays["action_raw"].shape[0],
+                    arrays["action"].shape[0],
                     path,
                 )
             )
