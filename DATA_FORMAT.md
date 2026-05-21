@@ -5,9 +5,7 @@ Source of truth for trajectory data in this project. Two formats:
 - **NPZ (per episode)** — what `simulation/utils/collect_trajectories.py` writes inside the SoftGym Docker (numpy-only, no h5py).
 - **HDF5 (consolidated)** — what `simulation/utils/npz_to_hdf5.py` produces for LeWM training in the modern ML environment.
 
-The HDF5 layout mirrors the columns LeWM consumes (`pixels`, `action`, `proprio`, `state`) so it loads with `stable_worldmodel.data.load_dataset`. The NPZ layout uses the same field names so conversion is a straight stack-along-episode operation.
-
-**Schema version: `3`.** v1 = original random collector, v2 = Ethan's scripted variant (lost), v3 = this spec.
+The HDF5 layout mirrors the columns LeWM consumes (`pixels`, `action`, `proprio`, `state`) so it loads with `stable_worldmodel.data.load_dataset`. The NPZ layout uses the same field names so conversion is a straight stack-along-episode operation. 
 
 ---
 
@@ -223,15 +221,4 @@ Approximate per-episode disk usage at the default 128×128, horizon=100:
 
 Defaults → ~1.5 MB/episode. Full pipeline (5k episodes) → ~7.5 GB. With `--save-full-state` add ~25 GB.
 
----
-
-## 10. Quick reference — what changed from v1
-
-| Change | v1 | v3 |
-|---|---|---|
-| Image key | `rgb` | `pixels` |
-| Action keys | `action_raw` + `action_normalized` | `action` (raw only) |
-| Proprio | absent | `(T+1, 8)` always |
-| State | optional, variable-length particles | compact `(T+1, 15)` always; full particle state behind `--save-full-state` |
-| Schema version | `1` | `3` |
-| File format | NPZ only | NPZ → HDF5 via converter |
+Schema Version 3
