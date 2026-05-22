@@ -1,0 +1,19 @@
+# Direct dependencies for training/ (not for simulation/ — that's py3.6 in Docker).
+# Use Python 3.10+ in a fresh venv:
+#   python3 -m venv .venv
+#   curl -sSf https://bootstrap.pypa.io/get-pip.py | .venv/bin/python -
+#   .venv/bin/pip install -r training/requirements.txt
+#
+# Torch comes from the official CUDA-12.1 wheel index. If you need a different
+# CUDA version, swap the --index-url line for the appropriate one from
+# https://pytorch.org/get-started/locally/ (cu118, cu124, etc.) or remove it
+# entirely for CPU-only.
+
+--index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+
+--extra-index-url https://pypi.org/simple
+h5py==3.16.0
+numpy==2.4.6
+einops==0.8.2
+matplotlib==3.10.9

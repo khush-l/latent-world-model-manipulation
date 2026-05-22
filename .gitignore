@@ -12,6 +12,14 @@ build/
 .vscode
 .cursor
 
+# Python virtual environments
+.venv/
+venv/
+.env/
+
+# Training outputs (metrics, checkpoints, plots)
+# training/runs/
+
 # Simulation artifacts
 simulation/data/
 simulation/softagent/data/
