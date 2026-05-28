@@ -40,3 +40,7 @@ simulation/PyFlex/bindings/examples/*.gif
 simulation/PyFlex/**/*.exp
 simulation/PyFlex/**/*.ilk
 simulation/PyFlex/**/*.apk
+# Baseline generated artifacts
+outputs/
+baselines/logs/
+*.log

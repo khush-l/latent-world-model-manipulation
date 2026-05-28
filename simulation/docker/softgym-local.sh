@@ -102,6 +102,13 @@ docker_common_args() {
     )
   fi
 
+  if [[ -d /usr/share/glvnd/egl_vendor.d ]]; then
+    args+=(
+      -v /usr/share/glvnd/egl_vendor.d:/usr/share/glvnd/egl_vendor.d:ro
+      -e "__EGL_VENDOR_LIBRARY_DIRS=/usr/share/glvnd/egl_vendor.d"
+    )
+  fi
+
   printf '%s\n' "${args[@]}"
 }
 

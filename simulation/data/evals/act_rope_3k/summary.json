@@ -1,0 +1,13 @@
+{
+  "checkpoint": "outputs/train/act_softgym_rope_scripted_vla_150/checkpoints/003000/pretrained_model",
+  "created_at": "2026-05-28T16:54:47+0000",
+  "env": "RopeFlatten",
+  "mean_final_end_point_distance": 0.19849586933851243,
+  "mean_final_normalized_performance": 0.3969917297363281,
+  "mean_return": -23.012798807770015,
+  "n_episodes": 10,
+  "policy": "act_rope_3k",
+  "std_final_normalized_performance": 0.14979782700538635,
+  "success_rate": 0.0,
+  "success_threshold": 0.8
+}

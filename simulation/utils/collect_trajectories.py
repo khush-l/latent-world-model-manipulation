@@ -31,7 +31,7 @@ import pyflex  # noqa: E402
 
 STATE_ARRAY_KEYS = ("particle_pos", "particle_vel", "shape_pos", "phase")
 SCHEMA_VERSION = 3
-STATE_DIM = 15  # see DATA_FORMAT.md §5
+STATE_DIM = 15  # see DATA_FORMAT.md section 5
 GRIP_INDEX = 3  # action[:, 3] = grip per picker
 
 
@@ -63,14 +63,44 @@ def parse_args():
         action="store_true",
         help="Also dump variable-length particle/shape/phase arrays. "
              "Used for MPC _set_state at eval time; not part of the LeWM "
-             "training table. See DATA_FORMAT.md §3.",
+             "training table. See DATA_FORMAT.md section 3.",
     )
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
-        choices=("random",),
+        choices=(
+            "random",
+            "rope_geometric",
+            "cloth_geometric",
+            "rope_geometric_v2",
+            "cloth_geometric_v2",
+        ),
         default="random",
-        help="Behavior policy. Only random is implemented here.",
+        help="Behavior policy. rope_geometric and cloth_geometric are scripted demo policies.",
+    )
+    parser.add_argument(
+        "--script-noise-scale",
+        type=float,
+        default=0.15,
+        help="Relative noise scale for scripted policy actions.",
+    )
+    parser.add_argument(
+        "--script-lateral-scale",
+        type=float,
+        default=0.20,
+        help="Relative lateral wiggle scale for scripted rope pulling.",
+    )
+    parser.add_argument(
+        "--cloth-pull-scale",
+        type=float,
+        default=0.55,
+        help="Fraction of current cloth bbox half-diagonal to pull beyond for cloth_geometric.",
+    )
+    parser.add_argument(
+        "--cloth-lift-height",
+        type=float,
+        default=0.055,
+        help="Picker height during cloth_geometric pull stage.",
     )
     return parser.parse_args()
 
@@ -158,8 +188,398 @@ def sample_action(action_space):
     return np.clip(action_raw, low, high).astype(np.float32)
 
 
+def clip_action(action, action_space):
+    if isinstance(action_space, gym.spaces.Box):
+        low = action_space.low.astype(np.float32)
+        high = action_space.high.astype(np.float32)
+        return np.clip(action.astype(np.float32), low, high).astype(np.float32)
+    return action.astype(np.float32)
+
+
+def _rope_axis_from_particles(particle_pos):
+    xz = particle_pos[:, [0, 2]]
+    centered = xz - xz.mean(axis=0, keepdims=True)
+    if centered.shape[0] < 2 or np.linalg.norm(centered) < 1e-6:
+        return np.array([1.0, 0.0], dtype=np.float32)
+    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    axis = vh[0].astype(np.float32)
+    if np.linalg.norm(axis) < 1e-6:
+        axis = np.array([1.0, 0.0], dtype=np.float32)
+    return axis / (np.linalg.norm(axis) + 1e-8)
+
+
+def _macro_delta_to_action_delta(delta, env, action_space):
+    repeat = max(int(getattr(env, "action_repeat", 1)), 1)
+    per_repeat_delta = delta / float(repeat)
+    if isinstance(action_space, gym.spaces.Box):
+        low = action_space.low.reshape(-1, 4)[:, :3]
+        high = action_space.high.reshape(-1, 4)[:, :3]
+        per_repeat_delta = np.clip(per_repeat_delta, low, high)
+    return per_repeat_delta.astype(np.float32)
+
+
+def _script_noise(target, action_space, scale, vertical_scale=0.25):
+    if scale <= 0:
+        return target
+    if isinstance(action_space, gym.spaces.Box):
+        max_delta = np.maximum(np.abs(action_space.high.reshape(-1, 4)[:, :3]), 1e-6)
+    else:
+        max_delta = np.ones((2, 3), dtype=np.float32) * 0.01
+    noise = np.random.normal(loc=0.0, scale=scale, size=(2, 3)).astype(np.float32)
+    noise = noise * max_delta.astype(np.float32)
+    noise[:, 1] *= vertical_scale
+    return target + noise
+
+
+def rope_geometric_action(env, step_idx, args):
+    """Two-picker scripted RopeFlatten policy.
+
+    Stages:
+    1. Move pickers above the rope endpoints.
+    2. Descend and grasp endpoint particles.
+    3. Pull endpoints apart along the rope's principal axis with small lateral
+       wiggles/noise to expose local deformable dynamics.
+    4. Hold, then release/lift near the end of the episode.
+    """
+    if args.env_name != "RopeFlatten":
+        raise ValueError("rope_geometric policy only supports RopeFlatten")
+
+    action_space = env.action_space
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_pos = shape_states[:2, :3].astype(np.float32)
+    particles = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+
+    endpoint0 = particles[0].copy()
+    endpoint1 = particles[-1].copy()
+    center = particles.mean(axis=0)
+
+    endpoint_axis = endpoint0[[0, 2]] - endpoint1[[0, 2]]
+    if np.linalg.norm(endpoint_axis) < 0.03:
+        axis_xz = _rope_axis_from_particles(particles)
+        if np.dot(axis_xz, endpoint_axis) < 0:
+            axis_xz = -axis_xz
+    else:
+        axis_xz = endpoint_axis / (np.linalg.norm(endpoint_axis) + 1e-8)
+    perp_xz = np.array([-axis_xz[1], axis_xz[0]], dtype=np.float32)
+
+    horizon = max(int(env.horizon), 1)
+    frac = float(step_idx) / float(horizon)
+    rope_length = float(getattr(env, "rope_length", 0.5))
+    half_pull = max(0.45 * rope_length, 0.18)
+
+    target = np.zeros((2, 3), dtype=np.float32)
+    grip = np.zeros(2, dtype=np.float32)
+
+    if frac < 0.18:
+        target[0] = endpoint0 + np.array([0.0, 0.08, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.08, 0.0], dtype=np.float32)
+    elif frac < 0.30:
+        target[0] = endpoint0 + np.array([0.0, 0.025, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.025, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    elif frac < 0.82:
+        pull_frac = (frac - 0.30) / 0.52
+        current_half = 0.5 * np.linalg.norm(endpoint0[[0, 2]] - endpoint1[[0, 2]])
+        desired_half = (1.0 - pull_frac) * current_half + pull_frac * half_pull
+        lateral = (
+            args.script_lateral_scale
+            * rope_length
+            * 0.08
+            * np.sin(2.0 * np.pi * (3.0 * pull_frac + 0.17 * (args.seed + step_idx)))
+        )
+        target_xz_0 = center[[0, 2]] + axis_xz * desired_half + perp_xz * lateral
+        target_xz_1 = center[[0, 2]] - axis_xz * desired_half - perp_xz * lateral
+        target[0] = np.array([target_xz_0[0], 0.055, target_xz_0[1]], dtype=np.float32)
+        target[1] = np.array([target_xz_1[0], 0.055, target_xz_1[1]], dtype=np.float32)
+        grip[:] = 1.0
+    elif frac < 0.92:
+        target[0] = endpoint0 + np.array([0.0, 0.045, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.045, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    else:
+        target[0] = endpoint0 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+
+    if args.script_noise_scale > 0:
+        if isinstance(action_space, gym.spaces.Box):
+            max_delta = np.maximum(np.abs(action_space.high.reshape(-1, 4)[:, :3]), 1e-6)
+        else:
+            max_delta = np.ones((2, 3), dtype=np.float32) * 0.01
+        noise = np.random.normal(
+            loc=0.0,
+            scale=args.script_noise_scale * 0.20,
+            size=(2, 3),
+        ).astype(np.float32) * max_delta.astype(np.float32)
+        noise[:, 1] *= 0.25
+        target += noise
+
+    delta = _macro_delta_to_action_delta(target - picker_pos, env, action_space)
+    action = np.concatenate([delta, grip.reshape(-1, 1)], axis=1).reshape(-1)
+    return clip_action(action, action_space)
+
+
+
+def rope_geometric_v2_action(env, step_idx, args):
+    """Stronger RopeFlatten demo policy with longer, cleaner endpoint pulls."""
+    if args.env_name != "RopeFlatten":
+        raise ValueError("rope_geometric_v2 policy only supports RopeFlatten")
+
+    action_space = env.action_space
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_pos = shape_states[:2, :3].astype(np.float32)
+    particles = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+
+    endpoint0 = particles[0].copy()
+    endpoint1 = particles[-1].copy()
+    center = particles.mean(axis=0)
+    axis_xz = endpoint0[[0, 2]] - endpoint1[[0, 2]]
+    if np.linalg.norm(axis_xz) < 0.03:
+        axis_xz = _rope_axis_from_particles(particles)
+    else:
+        axis_xz = axis_xz / (np.linalg.norm(axis_xz) + 1e-8)
+
+    horizon = max(int(env.horizon), 1)
+    frac = float(step_idx) / float(horizon)
+    rope_length = float(getattr(env, "rope_length", 0.5))
+    target_half = max(0.58 * rope_length, 0.25)
+
+    target = np.zeros((2, 3), dtype=np.float32)
+    grip = np.zeros(2, dtype=np.float32)
+    if frac < 0.12:
+        target[0] = endpoint0 + np.array([0.0, 0.09, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.09, 0.0], dtype=np.float32)
+    elif frac < 0.22:
+        target[0] = endpoint0 + np.array([0.0, 0.018, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.018, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    elif frac < 0.88:
+        pull_frac = (frac - 0.22) / 0.66
+        pull_frac = 0.5 - 0.5 * np.cos(np.pi * pull_frac)
+        target_xz_0 = center[[0, 2]] + axis_xz * target_half
+        target_xz_1 = center[[0, 2]] - axis_xz * target_half
+        height = 0.050
+        end0 = np.array([target_xz_0[0], height, target_xz_0[1]], dtype=np.float32)
+        end1 = np.array([target_xz_1[0], height, target_xz_1[1]], dtype=np.float32)
+        start0 = endpoint0 + np.array([0.0, height, 0.0], dtype=np.float32)
+        start1 = endpoint1 + np.array([0.0, height, 0.0], dtype=np.float32)
+        target[0] = (1.0 - pull_frac) * start0 + pull_frac * end0
+        target[1] = (1.0 - pull_frac) * start1 + pull_frac * end1
+        grip[:] = 1.0
+    elif frac < 0.95:
+        target[0] = endpoint0 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    else:
+        target[0] = endpoint0 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+        target[1] = endpoint1 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+
+    target = _script_noise(target, action_space, args.script_noise_scale * 0.08)
+    delta = _macro_delta_to_action_delta(target - picker_pos, env, action_space)
+    action = np.concatenate([delta, grip.reshape(-1, 1)], axis=1).reshape(-1)
+    return clip_action(action, action_space)
+
+
+def _principal_axis_xz(points_xz):
+    centered = points_xz - points_xz.mean(axis=0, keepdims=True)
+    if centered.shape[0] < 2 or np.linalg.norm(centered) < 1e-6:
+        return np.array([1.0, 0.0], dtype=np.float32)
+    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    axis = vh[0].astype(np.float32)
+    if np.linalg.norm(axis) < 1e-6:
+        axis = np.array([1.0, 0.0], dtype=np.float32)
+    return axis / (np.linalg.norm(axis) + 1e-8)
+
+
+def _farthest_pair_indices(points_xz):
+    n = points_xz.shape[0]
+    if n < 2:
+        return 0, 0
+    # Cloth has at most ~7k particles in our setup; this O(N^2) search is only
+    # called once per stored env step and is acceptable for small VLA demos.
+    diff = points_xz[:, None, :] - points_xz[None, :, :]
+    dist2 = np.sum(diff * diff, axis=-1)
+    i, j = np.unravel_index(np.argmax(dist2), dist2.shape)
+    return int(i), int(j)
+
+
+def _extreme_pair_along_axis(points_xz, axis_xz):
+    axis_xz = axis_xz.astype(np.float32)
+    axis_xz = axis_xz / (np.linalg.norm(axis_xz) + 1e-8)
+    proj = points_xz.dot(axis_xz)
+    return int(np.argmax(proj)), int(np.argmin(proj))
+
+
+def cloth_geometric_action(env, step_idx, args):
+    """Two-picker scripted ClothFlatten policy.
+
+    The policy imitates a simple human flattening primitive: find two far-apart
+    visible cloth particles, approach from above, grasp them, lift slightly, pull
+    outward along the cloth's dominant axis, then release. It is intentionally a
+    high-quality demo policy for ACT/SmolVLA fine-tuning, not a broad dynamics
+    exploration policy.
+    """
+    if args.env_name != "ClothFlatten":
+        raise ValueError("cloth_geometric policy only supports ClothFlatten")
+
+    action_space = env.action_space
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_pos = shape_states[:2, :3].astype(np.float32)
+    particles = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+    points_xz = particles[:, [0, 2]]
+    center_xz = points_xz.mean(axis=0)
+
+    idx0, idx1 = _farthest_pair_indices(points_xz)
+    p0 = particles[idx0].copy()
+    p1 = particles[idx1].copy()
+    axis_xz = p0[[0, 2]] - p1[[0, 2]]
+    if np.linalg.norm(axis_xz) < 0.03:
+        axis_xz = _principal_axis_xz(points_xz)
+    else:
+        axis_xz = axis_xz / (np.linalg.norm(axis_xz) + 1e-8)
+    perp_xz = np.array([-axis_xz[1], axis_xz[0]], dtype=np.float32)
+
+    bbox_min = points_xz.min(axis=0)
+    bbox_max = points_xz.max(axis=0)
+    half_extent = 0.5 * np.linalg.norm(bbox_max - bbox_min)
+    pull_half = half_extent * (1.0 + float(args.cloth_pull_scale))
+    pull_half = float(np.clip(pull_half, 0.16, 0.42))
+
+    horizon = max(int(env.horizon), 1)
+    frac = float(step_idx) / float(horizon)
+    target = np.zeros((2, 3), dtype=np.float32)
+    grip = np.zeros(2, dtype=np.float32)
+
+    if frac < 0.18:
+        target[0] = p0 + np.array([0.0, 0.10, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.10, 0.0], dtype=np.float32)
+    elif frac < 0.30:
+        target[0] = p0 + np.array([0.0, 0.025, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.025, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    elif frac < 0.82:
+        pull_frac = (frac - 0.30) / 0.52
+        lateral = (
+            args.script_lateral_scale
+            * 0.035
+            * np.sin(2.0 * np.pi * (2.0 * pull_frac + 0.11 * (args.seed + step_idx)))
+        )
+        target_xz_0 = center_xz + axis_xz * pull_half + perp_xz * lateral
+        target_xz_1 = center_xz - axis_xz * pull_half - perp_xz * lateral
+        height = float(args.cloth_lift_height)
+        target[0] = np.array([target_xz_0[0], height, target_xz_0[1]], dtype=np.float32)
+        target[1] = np.array([target_xz_1[0], height, target_xz_1[1]], dtype=np.float32)
+        grip[:] = 1.0
+    elif frac < 0.92:
+        target[0] = p0 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    else:
+        target[0] = p0 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+
+    if args.script_noise_scale > 0:
+        if isinstance(action_space, gym.spaces.Box):
+            max_delta = np.maximum(np.abs(action_space.high.reshape(-1, 4)[:, :3]), 1e-6)
+        else:
+            max_delta = np.ones((2, 3), dtype=np.float32) * 0.01
+        noise = np.random.normal(
+            loc=0.0,
+            scale=args.script_noise_scale * 0.15,
+            size=(2, 3),
+        ).astype(np.float32) * max_delta.astype(np.float32)
+        noise[:, 1] *= 0.25
+        target += noise
+
+    delta = _macro_delta_to_action_delta(target - picker_pos, env, action_space)
+    action = np.concatenate([delta, grip.reshape(-1, 1)], axis=1).reshape(-1)
+    return clip_action(action, action_space)
+
+
+def cloth_geometric_v2_action(env, step_idx, args):
+    """Two-stage ClothFlatten policy for high-success imitation demos.
+
+    Stage one stretches the dominant axis. Stage two releases and stretches the
+    perpendicular axis, which usually produces better coverage than a single pull.
+    """
+    if args.env_name != "ClothFlatten":
+        raise ValueError("cloth_geometric_v2 policy only supports ClothFlatten")
+
+    action_space = env.action_space
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_pos = shape_states[:2, :3].astype(np.float32)
+    particles = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+    points_xz = particles[:, [0, 2]]
+    center_xz = points_xz.mean(axis=0)
+    principal = _principal_axis_xz(points_xz)
+    perp = np.array([-principal[1], principal[0]], dtype=np.float32)
+
+    horizon = max(int(env.horizon), 1)
+    frac = float(step_idx) / float(horizon)
+    second_stage = frac >= 0.48
+    local_frac = frac / 0.48 if not second_stage else (frac - 0.48) / 0.47
+    axis = perp if second_stage else principal
+    idx0, idx1 = _extreme_pair_along_axis(points_xz, axis)
+    p0 = particles[idx0].copy()
+    p1 = particles[idx1].copy()
+
+    bbox_min = points_xz.min(axis=0)
+    bbox_max = points_xz.max(axis=0)
+    half_extent = 0.5 * np.linalg.norm(bbox_max - bbox_min)
+    pull_half = float(np.clip(half_extent * (1.0 + float(args.cloth_pull_scale)), 0.18, 0.46))
+
+    target = np.zeros((2, 3), dtype=np.float32)
+    grip = np.zeros(2, dtype=np.float32)
+
+    if frac >= 0.95:
+        target[0] = p0 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.12, 0.0], dtype=np.float32)
+    elif local_frac < 0.18:
+        target[0] = p0 + np.array([0.0, 0.09, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.09, 0.0], dtype=np.float32)
+    elif local_frac < 0.30:
+        target[0] = p0 + np.array([0.0, 0.020, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.020, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+    elif local_frac < 0.86:
+        pull_frac = (local_frac - 0.30) / 0.56
+        pull_frac = 0.5 - 0.5 * np.cos(np.pi * pull_frac)
+        target_xz_0 = center_xz + axis * pull_half
+        target_xz_1 = center_xz - axis * pull_half
+        height = float(args.cloth_lift_height)
+        end0 = np.array([target_xz_0[0], height, target_xz_0[1]], dtype=np.float32)
+        end1 = np.array([target_xz_1[0], height, target_xz_1[1]], dtype=np.float32)
+        start0 = p0 + np.array([0.0, height, 0.0], dtype=np.float32)
+        start1 = p1 + np.array([0.0, height, 0.0], dtype=np.float32)
+        target[0] = (1.0 - pull_frac) * start0 + pull_frac * end0
+        target[1] = (1.0 - pull_frac) * start1 + pull_frac * end1
+        grip[:] = 1.0
+    else:
+        target[0] = p0 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        target[1] = p1 + np.array([0.0, 0.040, 0.0], dtype=np.float32)
+        grip[:] = 1.0
+
+    target = _script_noise(target, action_space, args.script_noise_scale * 0.07)
+    delta = _macro_delta_to_action_delta(target - picker_pos, env, action_space)
+    action = np.concatenate([delta, grip.reshape(-1, 1)], axis=1).reshape(-1)
+    return clip_action(action, action_space)
+
+
+def choose_action(env, args, step_idx):
+    if args.policy == "random":
+        return sample_action(env.action_space)
+    if args.policy == "rope_geometric":
+        return rope_geometric_action(env, step_idx, args)
+    if args.policy == "rope_geometric_v2":
+        return rope_geometric_v2_action(env, step_idx, args)
+    if args.policy == "cloth_geometric":
+        return cloth_geometric_action(env, step_idx, args)
+    if args.policy == "cloth_geometric_v2":
+        return cloth_geometric_v2_action(env, step_idx, args)
+    raise ValueError("unknown policy: {}".format(args.policy))
+
+
 def extract_proprio(env, num_picker):
-    """Picker xyz (per picker) + holding flag (0/1) → (4 * num_picker,) float32."""
+    """Picker xyz (per picker) + holding flag (0/1) -> (4 * num_picker,) float32."""
     shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
     picker_xyz = shape_states[:num_picker, :3].astype(np.float32)
     picked = getattr(env.action_tool, "picked_particles", [None] * num_picker)
@@ -171,7 +591,7 @@ def extract_proprio(env, num_picker):
 
 
 def extract_compact_state(num_picker):
-    """Fixed-dim privileged state — see DATA_FORMAT.md §5."""
+    """Fixed-dim privileged state - see DATA_FORMAT.md section 5."""
     shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
     picker_xyz = shape_states[:num_picker, :3].astype(np.float32).reshape(-1)
     if picker_xyz.shape[0] < 6:
@@ -263,8 +683,8 @@ def collect_episode(env, args, episode_idx, env_kwargs):
     if args.save_full_state:
         append_state(full_state_buffers, extract_state_arrays(env))
 
-    for _ in range(env.horizon):
-        action_raw = sample_action(env.action_space)
+    for step_idx in range(env.horizon):
+        action_raw = choose_action(env, args, step_idx)
         _, reward, done, info = env.step(action_raw)
 
         actions.append(np.asarray(action_raw, dtype=np.float32).copy())
@@ -290,7 +710,17 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "env_name": args.env_name,
         "episode_idx": episode_idx,
         "seed": args.seed,
-        "policy": args.policy,
+        "policy": "scripted" if args.policy in (
+            "rope_geometric",
+            "cloth_geometric",
+            "rope_geometric_v2",
+            "cloth_geometric_v2",
+        ) else args.policy,
+        "behavior_policy": args.policy,
+        "script_noise_scale": float(args.script_noise_scale),
+        "script_lateral_scale": float(args.script_lateral_scale),
+        "cloth_pull_scale": float(args.cloth_pull_scale),
+        "cloth_lift_height": float(args.cloth_lift_height),
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "env_kwargs": to_jsonable(env_kwargs),
         "config_id": to_jsonable(getattr(env, "current_config_id", None)),
@@ -313,7 +743,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
     reward_arr = np.asarray(rewards, dtype=np.float32)
     done_arr = np.asarray(dones, dtype=np.bool_)
 
-    # Length invariants — see DATA_FORMAT.md §8.
+    # Length invariants - see DATA_FORMAT.md section 8.
     T = action_arr.shape[0]
     assert pixels_arr.shape[0] == T + 1, (pixels_arr.shape, T)
     assert proprio_arr.shape[0] == T + 1, (proprio_arr.shape, T)

@@ -11,13 +11,14 @@ Usage:
 
 Examples:
   docker/collect-trajectories.sh --env-name ClothFlatten --num-episodes 10 --num-variations 10 --img-size 128
-  docker/collect-trajectories.sh --env-name RopeFlatten --num-episodes 100 --save-state --save-depth
+  docker/collect-trajectories.sh --env-name RopeFlatten --policy rope_geometric --num-episodes 100
 
-If no arguments are provided, this runs a small ClothFlatten collection:
-  --env-name ClothFlatten --num-episodes 10 --num-variations 10 --img-size 128
+If no arguments are provided, this runs a small scripted RopeFlatten collection:
+  --env-name RopeFlatten --policy rope_geometric --num-episodes 10 --num-variations 10 --img-size 128 --camera-width 128 --camera-height 128 --headless 0
 
 Environment variables:
   SOFTGYM_LOCAL_IMAGE  Docker image tag used by softgym-local.sh
+  SOFTGYM_HEADLESS     Use 0 for WSLg/local display, 1 for headless EGL
 USAGE
 }
 
@@ -38,10 +39,14 @@ fi
 collector_args=("$@")
 if [[ ${#collector_args[@]} -eq 0 ]]; then
   collector_args=(
-    --env-name ClothFlatten
+    --env-name RopeFlatten
+    --policy rope_geometric
     --num-episodes 10
     --num-variations 10
     --img-size 128
+    --camera-width 128
+    --camera-height 128
+    --headless 0
   )
 fi
 
