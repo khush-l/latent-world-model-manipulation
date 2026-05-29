@@ -1,0 +1,17 @@
+{"time":"2026-05-28T11:09:59.703665795-07:00","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-05-28T11:09:59.703679115-07:00","level":"INFO","msg":"created symlink","path":"training/runs/wandb_online_smoke/wandb/run-20260528_110959-luu8kmgb/logs/debug-core.log"}
+{"time":"2026-05-28T11:09:59.809404427-07:00","level":"INFO","msg":"created new stream","id":"luu8kmgb"}
+{"time":"2026-05-28T11:09:59.809432647-07:00","level":"INFO","msg":"stream: started","id":"luu8kmgb"}
+{"time":"2026-05-28T11:09:59.809476376-07:00","level":"INFO","msg":"writer: Do: started","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:09:59.809488387-07:00","level":"INFO","msg":"handler: started","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:09:59.809555867-07:00","level":"INFO","msg":"sender: started","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:10:00.294357774-07:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-05-28T11:10:02.384233885-07:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-05-28T11:10:02.384718225-07:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-05-28T11:10:03.38495946-07:00","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"saving job artifact","runtime_seconds":0.834950133}],"total_operations":1}}
+{"time":"2026-05-28T11:10:04.07349841-07:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-05-28T11:10:05.44379257-07:00","level":"INFO","msg":"stream: closing","id":"luu8kmgb"}
+{"time":"2026-05-28T11:10:05.4438179-07:00","level":"INFO","msg":"handler: closed","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:10:05.44383129-07:00","level":"INFO","msg":"writer: Close: closed","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:10:05.44387601-07:00","level":"INFO","msg":"sender: closed","stream_id":"luu8kmgb"}
+{"time":"2026-05-28T11:10:05.44393922-07:00","level":"INFO","msg":"stream: closed","id":"luu8kmgb"}

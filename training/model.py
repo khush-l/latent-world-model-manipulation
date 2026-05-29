@@ -275,14 +275,14 @@ class JEPA(nn.Module):
 # ---------------------------------------------------------------------------
 
 def build_lewm(
-    img_size: int = 224,
-    patch_size: int = 14,
+    img_size: int = 128,
+    patch_size: int = 16,
     embed_dim: int = 192,
     encoder_depth: int = 12,
     encoder_heads: int = 3,
     predictor_depth: int = 6,
     predictor_heads: int = 16,
-    predictor_dim_head: int = 12,
+    predictor_dim_head: int = 64,  # heads=16 × dim_head=64 → 1024 inner-dim (ViT-S predictor, per LeWM Tab 6)
     predictor_mlp_dim: int = 2048,
     predictor_dropout: float = 0.1,
     history_size: int = 3,

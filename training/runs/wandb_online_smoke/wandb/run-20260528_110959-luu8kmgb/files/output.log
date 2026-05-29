@@ -1,0 +1,4 @@
+wandb: https://wandb.ai/231n-project/lewm-smoke/runs/luu8kmgb
+step     0 | loss 0.28291 | pred 0.28291 | sig 0.00000 | emb_std 0.411 | 2.4 steps/s
+step    10 | loss 0.00721 | pred 0.00721 | sig 0.00000 | emb_std 0.297 | 12.2 steps/s
+step    19 | loss 0.00203 | pred 0.00203 | sig 0.00000 | emb_std 0.337 | 14.9 steps/s

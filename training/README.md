@@ -51,7 +51,6 @@ python training/plot_metrics.py training/runs/<run_name>/metrics.jsonl
 ```
 
 Useful flags:
-- `--smooth N` — moving-average smoothing window
 - `--log-y` — log-scale the loss panels
 - `--output path.png` — custom output location
 
