@@ -65,6 +65,10 @@ def parse_args():
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--num-workers", type=int, default=0)
     p.add_argument("--lr", type=float, default=5e-5)
+    p.add_argument("--lr-schedule", choices=("constant", "cosine"), default="constant",
+                   help="LR schedule. 'cosine' = linear warmup then cosine decay to ~0.")
+    p.add_argument("--warmup-steps", type=int, default=0,
+                   help="Linear warmup steps (only used with --lr-schedule cosine).")
     p.add_argument("--weight-decay", type=float, default=1e-3)
     p.add_argument("--grad-clip", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=3072)
@@ -258,6 +262,20 @@ def main():
         fused=(device == "cuda"),  # ~5-10% speedup on CUDA, free win
     )
 
+    # Optional LR schedule. Default 'constant' matches the paper; 'cosine'
+    # does linear warmup over --warmup-steps then cosine decay to ~0 over
+    # the full --steps budget.
+    def _lr_lambda(step):
+        if args.lr_schedule == "constant":
+            return 1.0
+        warmup = max(args.warmup_steps, 0)
+        if step < warmup:
+            return (step + 1) / max(warmup, 1)
+        progress = (step - warmup) / max(args.steps - warmup, 1)
+        return 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, _lr_lambda)
+
     autocast_ctx = (
         torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
         if args.precision == "bf16" and device == "cuda"
@@ -309,6 +327,7 @@ def main():
             args.grad_clip if args.grad_clip else float("inf"),
         )
         optim.step()
+        scheduler.step()
 
         # Only sync GPU + build metrics dict on logging steps. Between
         # those, training runs lock-step with the GPU at full speed.
