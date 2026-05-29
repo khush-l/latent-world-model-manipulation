@@ -21,6 +21,143 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
+# ---------------------------------------------------------------------------
+# GPU-resident dataset — production-style: full table on device, no per-step
+# IO or CPU↔GPU copy.
+# ---------------------------------------------------------------------------
+
+class GPUDataset:
+    """Loads the entire v3 HDF5 onto the GPU once. Per-step access is a single
+    indexed gather → on-device normalize/transpose. Zero CPU work, zero
+    per-step host↔device transfer.
+
+    Sized for datasets that fit in GPU RAM:
+      - 5000-episode rope file (uint8): ~19 GB pixels (+ small columns)
+      - H100 80 GB has plenty of room for that + 18M-param model + activations
+    """
+
+    REQUIRED_KEYS = ("pixels", "action", "proprio", "state", "episode_idx", "step_idx")
+
+    def __init__(self, h5_path, num_steps: int = 4, img_size: int = 224,
+                 frameskip: int = 1, device: str = "cuda"):
+        self.h5_path = str(Path(h5_path).resolve())
+        self.num_steps = int(num_steps)
+        self.img_size = int(img_size)
+        self.frameskip = int(frameskip)
+        self.device = device
+
+        print(f"[GPUDataset] loading {self.h5_path} → {device}...", flush=True)
+        with h5py.File(self.h5_path, "r") as f:
+            for k in self.REQUIRED_KEYS:
+                if k not in f:
+                    raise KeyError(f"{self.h5_path} missing /{k}")
+            self.n_rows = int(f["pixels"].shape[0])
+            self.h_img, self.w_img = int(f["pixels"].shape[1]), int(f["pixels"].shape[2])
+            self.action_dim = int(f["action"].shape[1])
+            self.proprio_dim = int(f["proprio"].shape[1])
+            self.state_dim = int(f["state"].shape[1])
+
+            # Compute stats on CPU before uploading.
+            self.stats = {
+                "action":  _column_stats(f["action"][:]),
+                "proprio": _column_stats(f["proprio"][:]),
+                "state":   _column_stats(f["state"][:]),
+            }
+
+            # Pixels stay as uint8 on GPU — float conversion + normalize happen
+            # at sample time. That's 4× smaller upload + lets us afford the
+            # full dataset on a single H100.
+            self._pixels  = torch.from_numpy(f["pixels"][:]).to(device)              # (N, H, W, 3) uint8
+            self._action  = torch.from_numpy(f["action"][:].astype(np.float32)).to(device)
+            self._proprio = torch.from_numpy(f["proprio"][:].astype(np.float32)).to(device)
+            self._state   = torch.from_numpy(f["state"][:].astype(np.float32)).to(device)
+            self._epidx   = torch.from_numpy(f["episode_idx"][:].astype(np.int64)).to(device)
+            self._stepidx = torch.from_numpy(f["step_idx"][:].astype(np.int64)).to(device)
+            ep_idx_cpu    = f["episode_idx"][:]
+
+        # Window starts as int64 tensor for fast GPU gather.
+        windows = _episode_windows(ep_idx_cpu, num_steps * frameskip)
+        if not windows:
+            raise ValueError("no episodes long enough for num_steps*frameskip")
+        starts = np.asarray([w[0] for w in windows], dtype=np.int64)
+        self._window_starts = torch.from_numpy(starts).to(device)
+        self.n_windows = int(starts.shape[0])
+
+        # Per-step row offsets within a window (e.g. [0, 1, 2, 3] when frameskip=1).
+        self._row_offsets = torch.arange(
+            0, self.num_steps * self.frameskip, self.frameskip,
+            device=device, dtype=torch.int64,
+        )[: self.num_steps]
+
+        # Pre-upload normalization tensors so we don't recompute every batch.
+        self._imagenet_mean = torch.tensor(IMAGENET_MEAN, device=device).view(1, 1, 3, 1, 1)
+        self._imagenet_std  = torch.tensor(IMAGENET_STD,  device=device).view(1, 1, 3, 1, 1)
+        self._action_mean   = torch.from_numpy(self.stats["action"][0]).to(device)
+        self._action_std    = torch.from_numpy(self.stats["action"][1]).to(device)
+        self._proprio_mean  = torch.from_numpy(self.stats["proprio"][0]).to(device)
+        self._proprio_std   = torch.from_numpy(self.stats["proprio"][1]).to(device)
+        self._state_mean    = torch.from_numpy(self.stats["state"][0]).to(device)
+        self._state_std     = torch.from_numpy(self.stats["state"][1]).to(device)
+
+        pixel_gb = self._pixels.numel() / 1e9
+        total_gb = (self._pixels.numel()
+                    + self._action.numel() * 4 + self._proprio.numel() * 4
+                    + self._state.numel() * 4) / 1e9
+        print(f"[GPUDataset] uploaded {pixel_gb:.2f} GB pixels (+ {total_gb-pixel_gb:.2f} GB other) "
+              f"= {total_gb:.2f} GB total")
+        print(f"[GPUDataset] n_windows={self.n_windows}, n_rows={self.n_rows}")
+
+    def __len__(self):
+        return self.n_windows
+
+    def get_batch(self, batch_indices: torch.Tensor) -> dict:
+        """Gather a batch of windows by index.
+
+        Args:
+            batch_indices: (B,) int64 tensor of window indices, on `self.device`.
+        Returns:
+            dict of (B, T, ...) tensors, all on `self.device`.
+        """
+        # rows: (B, T) global row indices into the flat tables
+        starts = self._window_starts[batch_indices]              # (B,)
+        rows = starts.unsqueeze(1) + self._row_offsets.unsqueeze(0)  # (B, T)
+        flat = rows.reshape(-1)                                  # (B*T,)
+
+        pixels = self._pixels[flat]                              # (B*T, H, W, 3) uint8
+        # Normalize + reshape on GPU.
+        pixels = pixels.to(torch.float32) / 255.0
+        pixels = pixels.permute(0, 3, 1, 2).contiguous()         # (B*T, 3, H, W)
+        pixels = pixels.unflatten(0, (-1, self.num_steps))       # (B, T, 3, H, W)
+        pixels = (pixels - self._imagenet_mean) / self._imagenet_std
+        if pixels.shape[-1] != self.img_size or pixels.shape[-2] != self.img_size:
+            # GPU bilinear resize. Fold (B, T) into batch dim for interpolate.
+            B, T = pixels.shape[:2]
+            pixels = pixels.reshape(B * T, 3, *pixels.shape[-2:])
+            pixels = F.interpolate(pixels, size=(self.img_size, self.img_size),
+                                   mode="bilinear", align_corners=False)
+            pixels = pixels.reshape(B, T, 3, self.img_size, self.img_size)
+
+        def _norm(raw, mean, std):
+            raw = torch.nan_to_num(raw, nan=0.0)
+            return (raw - mean) / std
+
+        action  = _norm(self._action[flat].unflatten(0, (-1, self.num_steps)),
+                        self._action_mean,  self._action_std)
+        proprio = _norm(self._proprio[flat].unflatten(0, (-1, self.num_steps)),
+                        self._proprio_mean, self._proprio_std)
+        state   = _norm(self._state[flat].unflatten(0, (-1, self.num_steps)),
+                        self._state_mean,   self._state_std)
+
+        return {
+            "pixels":      pixels,
+            "action":      action,
+            "proprio":     proprio,
+            "state":       state,
+            "episode_idx": self._epidx[flat].unflatten(0, (-1, self.num_steps)),
+            "step_idx":    self._stepidx[flat].unflatten(0, (-1, self.num_steps)),
+        }
+
+
 def _column_stats(data: np.ndarray) -> tuple:
     """Per-column z-score from rows with no NaNs."""
     if data.ndim == 1:

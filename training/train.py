@@ -54,7 +54,7 @@ def _total_param_norm(model):
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dataset import HDF5SequenceDataset
+from dataset import HDF5SequenceDataset, GPUDataset
 from model import SIGReg, build_lewm, lewm_forward
 
 
@@ -101,8 +101,15 @@ def parse_args():
     p.add_argument("--device", default=None)
     p.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
     p.add_argument("--cache-pixels", action="store_true",
-                   help="Pre-load the entire HDF5 into RAM. Eliminates per-step "
-                        "gzip decompression — ~10x throughput on small datasets.")
+                   help="Pre-load the entire HDF5 into CPU RAM. Eliminates "
+                        "per-step gzip decompression but still pays per-step "
+                        "CPU prep + host→device copy.")
+    p.add_argument("--gpu-cache", action="store_true",
+                   help="Load the entire dataset onto GPU memory and skip the "
+                        "DataLoader entirely. Production-style: zero CPU work "
+                        "and zero host↔device transfer per step. Requires the "
+                        "dataset to fit on the GPU (rope 5k ≈ 19 GB pixels on "
+                        "H100 80GB). Mutually exclusive with --cache-pixels.")
     p.add_argument("--compile", action="store_true",
                    help="Wrap the model in torch.compile() — ~1.5-2x on H100. "
                         "First step pays a ~1 min compile cost.")
@@ -136,29 +143,55 @@ def main():
         torch.backends.cudnn.benchmark = True
 
     num_steps = args.history_size + args.num_preds
-    dataset = HDF5SequenceDataset(
-        h5_path=args.data,
-        num_steps=num_steps,
-        img_size=args.img_size,
-        frameskip=args.frameskip,
-        cache_pixels=args.cache_pixels,
-    )
-    print(f"dataset: {len(dataset)} windows  (rows={dataset.n_rows}, "
-          f"action_dim={dataset.action_dim}, proprio_dim={dataset.proprio_dim}, "
-          f"state_dim={dataset.state_dim})")
-    print(f"  stats — action: mean[:3]={dataset.stats['action'][0][:3]} std[:3]={dataset.stats['action'][1][:3]}")
+    if args.gpu_cache and args.cache_pixels:
+        raise SystemExit("--gpu-cache and --cache-pixels are mutually exclusive")
 
-    if args.overfit_batches > 0:
-        n_keep = min(args.overfit_batches * args.batch_size, len(dataset))
-        dataset = Subset(dataset, list(range(n_keep)))
-        print(f"overfit mode: using {n_keep} fixed windows")
+    if args.gpu_cache:
+        dataset = GPUDataset(
+            h5_path=args.data, num_steps=num_steps,
+            img_size=args.img_size, frameskip=args.frameskip, device=device,
+        )
+        n_windows = len(dataset)
+        action_dim = dataset.action_dim
+        proprio_dim = dataset.proprio_dim
+        state_dim = dataset.state_dim
+        n_rows = dataset.n_rows
+        loader = None  # tight custom loop below
+        steps_per_epoch = max(n_windows // args.batch_size, 1)
+        if args.overfit_batches > 0:
+            # Restrict the sample pool to the first N*batch windows.
+            n_pool = min(args.overfit_batches * args.batch_size, n_windows)
+            print(f"overfit mode: using {n_pool} fixed windows")
+        else:
+            n_pool = n_windows
+    else:
+        dataset = HDF5SequenceDataset(
+            h5_path=args.data,
+            num_steps=num_steps,
+            img_size=args.img_size,
+            frameskip=args.frameskip,
+            cache_pixels=args.cache_pixels,
+        )
+        n_windows = len(dataset)
+        action_dim = dataset.action_dim
+        proprio_dim = dataset.proprio_dim
+        state_dim = dataset.state_dim
+        n_rows = dataset.n_rows
+        if args.overfit_batches > 0:
+            n_keep = min(args.overfit_batches * args.batch_size, n_windows)
+            dataset = Subset(dataset, list(range(n_keep)))
+            print(f"overfit mode: using {n_keep} fixed windows")
+        loader = DataLoader(
+            dataset, batch_size=args.batch_size, shuffle=True,
+            num_workers=args.num_workers, pin_memory=(device == "cuda"),
+            drop_last=True, persistent_workers=args.num_workers > 0,
+        )
+        steps_per_epoch = max(len(loader), 1)
+        n_pool = n_windows
 
-    loader = DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=True,
-        num_workers=args.num_workers, pin_memory=(device == "cuda"),
-        drop_last=True, persistent_workers=args.num_workers > 0,
-    )
-    steps_per_epoch = max(len(loader), 1)
+    print(f"dataset: {n_windows} windows  (rows={n_rows}, "
+          f"action_dim={action_dim}, proprio_dim={proprio_dim}, "
+          f"state_dim={state_dim})")
     print(f"steps/epoch: {steps_per_epoch}  ({args.steps} steps ≈ {args.steps/steps_per_epoch:.2f} epochs)")
 
     model = build_lewm(
@@ -231,70 +264,88 @@ def main():
         else torch.amp.autocast(device_type="cpu", enabled=False)
     )
 
+    # Iterator that yields one batch per step. Two paths:
+    #  - --gpu-cache : tight on-device shuffle + gather, no DataLoader.
+    #  - default     : standard DataLoader (with optional CPU pixel cache).
+    def _gpu_batches():
+        perm = torch.randperm(n_pool, device=device)
+        cursor = 0
+        while True:
+            if cursor + args.batch_size > n_pool:
+                perm = torch.randperm(n_pool, device=device)
+                cursor = 0
+            idx = perm[cursor:cursor + args.batch_size]
+            cursor += args.batch_size
+            yield dataset.get_batch(idx)
+
+    def _cpu_batches():
+        while True:
+            for batch in loader:
+                yield {k: (v.to(device, non_blocking=True) if torch.is_tensor(v) else v)
+                       for k, v in batch.items()}
+
+    batch_iter = _gpu_batches() if args.gpu_cache else _cpu_batches()
+
     step = 0
     t_start = time.perf_counter()
     while step < args.steps:
-        for batch in loader:
-            if step >= args.steps:
-                break
-            batch = {k: v.to(device, non_blocking=True) if torch.is_tensor(v) else v
-                     for k, v in batch.items()}
+        batch = next(batch_iter)
 
-            model.train()
-            with autocast_ctx:
-                out = lewm_forward(
-                    model, batch,
-                    history_size=args.history_size, num_preds=args.num_preds,
-                    sigreg=sigreg, sigreg_weight=args.sigreg_weight,
-                )
-            loss = out["loss"]
-            optim.zero_grad(set_to_none=True)
-            loss.backward()
-            # clip_grad_norm_ returns a CUDA tensor (the pre-clip total norm).
-            # Don't .item() it here — that's a per-step sync. We materialize
-            # the Python float only on logging steps below.
-            grad_norm_t = torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                args.grad_clip if args.grad_clip else float("inf"),
+        model.train()
+        with autocast_ctx:
+            out = lewm_forward(
+                model, batch,
+                history_size=args.history_size, num_preds=args.num_preds,
+                sigreg=sigreg, sigreg_weight=args.sigreg_weight,
             )
-            optim.step()
+        loss = out["loss"]
+        optim.zero_grad(set_to_none=True)
+        loss.backward()
+        # clip_grad_norm_ returns a CUDA tensor (the pre-clip total norm).
+        # Don't .item() it here — that's a per-step sync. We materialize
+        # the Python float only on logging steps below.
+        grad_norm_t = torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            args.grad_clip if args.grad_clip else float("inf"),
+        )
+        optim.step()
 
-            # Only sync GPU + build metrics dict on logging steps. Between
-            # those, training runs lock-step with the GPU at full speed.
-            is_log_step = (step % args.log_every == 0) or (step == args.steps - 1)
-            if is_log_step:
-                elapsed = time.perf_counter() - t_start
-                metrics = {
-                    "step": step,
-                    "epoch": step / steps_per_epoch,
-                    "loss": float(loss.item()),
-                    "pred_loss": float(out["pred_loss"].item()),
-                    "sigreg_loss": float(out["sigreg_loss"].item()),
-                    "emb_std": float(out["emb_std"].item()),
-                    "emb_mean": float(out["emb_mean"].item()),
-                    "grad_norm": float(grad_norm_t.item()),
-                    "weight_norm": _total_param_norm(model),
-                    "lr": float(optim.param_groups[0]["lr"]),
-                    "steps_per_sec": (step + 1) / max(elapsed, 1e-6),
-                    "elapsed_s": elapsed,
-                }
-                if device == "cuda":
-                    metrics["peak_gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
-                if log_file is not None:
-                    log_file.write(json.dumps(metrics) + "\n")
-                if wandb_run is not None:
-                    wandb_run.log(metrics, step=step)
-                rate = metrics["steps_per_sec"]
-                print(
-                    f"step {step:5d} | loss {metrics['loss']:.5f} | "
-                    f"pred {metrics['pred_loss']:.5f} | "
-                    f"sig {metrics['sigreg_loss']:.5f} | "
-                    f"emb_std {metrics['emb_std']:.3f} | "
-                    f"{rate:.1f} steps/s"
-                )
-            if args.save_every and run_dir is not None and step > 0 and step % args.save_every == 0:
-                _save_ckpt(model, run_dir / f"ckpt_step{step:06d}.pt", args, step)
-            step += 1
+        # Only sync GPU + build metrics dict on logging steps. Between
+        # those, training runs lock-step with the GPU at full speed.
+        is_log_step = (step % args.log_every == 0) or (step == args.steps - 1)
+        if is_log_step:
+            elapsed = time.perf_counter() - t_start
+            metrics = {
+                "step": step,
+                "epoch": step / steps_per_epoch,
+                "loss": float(loss.item()),
+                "pred_loss": float(out["pred_loss"].item()),
+                "sigreg_loss": float(out["sigreg_loss"].item()),
+                "emb_std": float(out["emb_std"].item()),
+                "emb_mean": float(out["emb_mean"].item()),
+                "grad_norm": float(grad_norm_t.item()),
+                "weight_norm": _total_param_norm(model),
+                "lr": float(optim.param_groups[0]["lr"]),
+                "steps_per_sec": (step + 1) / max(elapsed, 1e-6),
+                "elapsed_s": elapsed,
+            }
+            if device == "cuda":
+                metrics["peak_gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
+            if log_file is not None:
+                log_file.write(json.dumps(metrics) + "\n")
+            if wandb_run is not None:
+                wandb_run.log(metrics, step=step)
+            rate = metrics["steps_per_sec"]
+            print(
+                f"step {step:5d} | loss {metrics['loss']:.5f} | "
+                f"pred {metrics['pred_loss']:.5f} | "
+                f"sig {metrics['sigreg_loss']:.5f} | "
+                f"emb_std {metrics['emb_std']:.3f} | "
+                f"{rate:.1f} steps/s"
+            )
+        if args.save_every and run_dir is not None and step > 0 and step % args.save_every == 0:
+            _save_ckpt(model, run_dir / f"ckpt_step{step:06d}.pt", args, step)
+        step += 1
 
     if run_dir is not None:
         _save_ckpt(model, run_dir / "ckpt_final.pt", args, step)
