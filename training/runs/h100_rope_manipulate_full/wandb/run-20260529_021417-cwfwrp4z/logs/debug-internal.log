@@ -1,0 +1,17 @@
+{"time":"2026-05-29T02:14:17.224731244Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-05-29T02:14:17.224741652Z","level":"INFO","msg":"created symlink","path":"training/runs/h100_rope_manipulate_full/wandb/run-20260529_021417-cwfwrp4z/logs/debug-core.log"}
+{"time":"2026-05-29T02:14:17.326688466Z","level":"INFO","msg":"created new stream","id":"cwfwrp4z"}
+{"time":"2026-05-29T02:14:17.326708708Z","level":"INFO","msg":"stream: started","id":"cwfwrp4z"}
+{"time":"2026-05-29T02:14:17.326741429Z","level":"INFO","msg":"handler: started","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:14:17.326741074Z","level":"INFO","msg":"writer: Do: started","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:14:17.326782365Z","level":"INFO","msg":"sender: started","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:14:17.914522453Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-05-29T02:24:06.218278142Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-05-29T02:24:06.218817187Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-05-29T02:24:07.218704276Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"saving job artifact","runtime_seconds":0.526760061},{"desc":"uploading config.yaml","runtime_seconds":0.291249368,"progress":"1.7KB/1.7KB"},{"desc":"uploading output.log","runtime_seconds":0.291237712,"progress":"84.3KB/84.3KB"}],"total_operations":3}}
+{"time":"2026-05-29T02:24:07.72141472Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-05-29T02:24:09.155834695Z","level":"INFO","msg":"stream: closing","id":"cwfwrp4z"}
+{"time":"2026-05-29T02:24:09.155857524Z","level":"INFO","msg":"handler: closed","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:24:09.15586719Z","level":"INFO","msg":"writer: Close: closed","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:24:09.155895217Z","level":"INFO","msg":"sender: closed","stream_id":"cwfwrp4z"}
+{"time":"2026-05-29T02:24:09.155924712Z","level":"INFO","msg":"stream: closed","id":"cwfwrp4z"}

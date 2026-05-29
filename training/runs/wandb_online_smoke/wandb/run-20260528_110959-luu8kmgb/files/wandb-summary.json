@@ -1,1 +1,0 @@
-{"step":19,"pred_loss":0.0020336059387773275,"model/params_M":14.190024,"_timestamp":1.7799918023830752e+09,"emb_std":0.33688151836395264,"_wandb":{"runtime":2},"emb_mean":0.026689454913139343,"sigreg_loss":0,"data/n_windows":16,"_runtime":2.681847295,"elapsed_s":1.342130629811436,"loss":0.0020336059387773275,"_step":19}

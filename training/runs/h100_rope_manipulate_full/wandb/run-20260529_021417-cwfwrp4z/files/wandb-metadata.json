@@ -1,0 +1,71 @@
+{
+  "os": "Linux-6.11.0-1016-nvidia-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "startedAt": "2026-05-29T02:14:17.223875Z",
+  "args": [
+    "--data",
+    "simulation/data/rope/ropeflatten_manipulate_5k_v3.h5",
+    "--batch-size",
+    "128",
+    "--img-size",
+    "128",
+    "--patch-size",
+    "16",
+    "--steps",
+    "20000",
+    "--log-every",
+    "20",
+    "--gpu-cache",
+    "--precision",
+    "bf16",
+    "--save-every",
+    "10000",
+    "--run-name",
+    "h100_rope_manipulate_full",
+    "--wandb",
+    "--wandb-entity",
+    "231n-project",
+    "--wandb-project",
+    "lewm-softgym",
+    "--wandb-tags",
+    "rope,manipulate,5k,full_run"
+  ],
+  "program": "/home/ubuntu/cs231n-project/training/train.py",
+  "codePath": "training/train.py",
+  "git": {
+    "remote": "git@github.com:nikunjparasar/cs231n-project.git",
+    "commit": "e8bdc08b09deb3018f85472833a6958d1694d42c"
+  },
+  "email": "nikunj@stanford.edu",
+  "root": "training/runs/h100_rope_manipulate_full",
+  "host": "brev-1gdpr0n47",
+  "username": "ubuntu",
+  "executable": "/home/ubuntu/cs231n-project/.venv/bin/python",
+  "codePathLocal": "training/train.py",
+  "cpu_count": 8,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "265147105280",
+      "used": "38800191488"
+    }
+  },
+  "memory": {
+    "total": "211069919232"
+  },
+  "cpu": {
+    "count": 8,
+    "countLogical": 16
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA H100 80GB HBM3",
+      "memoryTotal": "85520809984",
+      "cudaCores": 16896,
+      "architecture": "Hopper"
+    }
+  ],
+  "cudaVersion": "13.0"
+}

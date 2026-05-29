@@ -1,0 +1,17 @@
+{"time":"2026-05-29T01:52:35.304675565Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-05-29T01:52:35.3046908Z","level":"INFO","msg":"created symlink","path":"training/runs/h100_rope_geometric_full/wandb/run-20260529_015235-egnd7npm/logs/debug-core.log"}
+{"time":"2026-05-29T01:52:35.407103205Z","level":"INFO","msg":"created new stream","id":"egnd7npm"}
+{"time":"2026-05-29T01:52:35.407122512Z","level":"INFO","msg":"stream: started","id":"egnd7npm"}
+{"time":"2026-05-29T01:52:35.407143666Z","level":"INFO","msg":"writer: Do: started","stream_id":"egnd7npm"}
+{"time":"2026-05-29T01:52:35.407167794Z","level":"INFO","msg":"sender: started","stream_id":"egnd7npm"}
+{"time":"2026-05-29T01:52:35.407226355Z","level":"INFO","msg":"handler: started","stream_id":"egnd7npm"}
+{"time":"2026-05-29T01:52:35.84751201Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-05-29T02:07:05.143359487Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-05-29T02:07:05.143916157Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-05-29T02:07:06.143755118Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"saving job artifact","runtime_seconds":0.539236411},{"desc":"uploading config.yaml","runtime_seconds":0.325728425,"progress":"1.7KB/1.7KB"},{"desc":"uploading output.log","runtime_seconds":0.325716223,"progress":"25.6KB/25.6KB"}],"total_operations":3}}
+{"time":"2026-05-29T02:07:06.581554134Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-05-29T02:07:08.093708448Z","level":"INFO","msg":"stream: closing","id":"egnd7npm"}
+{"time":"2026-05-29T02:07:08.09372634Z","level":"INFO","msg":"handler: closed","stream_id":"egnd7npm"}
+{"time":"2026-05-29T02:07:08.093733562Z","level":"INFO","msg":"writer: Close: closed","stream_id":"egnd7npm"}
+{"time":"2026-05-29T02:07:08.09375076Z","level":"INFO","msg":"sender: closed","stream_id":"egnd7npm"}
+{"time":"2026-05-29T02:07:08.093780489Z","level":"INFO","msg":"stream: closed","id":"egnd7npm"}

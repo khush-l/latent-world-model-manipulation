@@ -1,0 +1,17 @@
+{"time":"2026-05-29T02:32:43.225871361Z","level":"INFO","msg":"using version","core version":"0.18.7"}
+{"time":"2026-05-29T02:32:43.225885024Z","level":"INFO","msg":"created symlink","path":"training/runs/rope_full_mixed_v1/wandb/run-20260529_023243-mqn1uu9w/logs/debug-core.log"}
+{"time":"2026-05-29T02:32:43.32823042Z","level":"INFO","msg":"created new stream","id":"mqn1uu9w"}
+{"time":"2026-05-29T02:32:43.328246709Z","level":"INFO","msg":"stream: started","id":"mqn1uu9w"}
+{"time":"2026-05-29T02:32:43.328279511Z","level":"INFO","msg":"writer: Do: started","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T02:32:43.328292265Z","level":"INFO","msg":"sender: started","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T02:32:43.328333947Z","level":"INFO","msg":"handler: started","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T02:32:43.827105324Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2026-05-29T03:22:24.243588021Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2026-05-29T03:22:24.244130335Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2026-05-29T03:22:25.244014032Z","level":"INFO","msg":"handler: operation stats","stats":{"operations":[{"desc":"saving job artifact","runtime_seconds":0.149141213}],"total_operations":1}}
+{"time":"2026-05-29T03:22:26.383845386Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2026-05-29T03:22:27.743495733Z","level":"INFO","msg":"stream: closing","id":"mqn1uu9w"}
+{"time":"2026-05-29T03:22:27.743514408Z","level":"INFO","msg":"handler: closed","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T03:22:27.743524441Z","level":"INFO","msg":"writer: Close: closed","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T03:22:27.743546222Z","level":"INFO","msg":"sender: closed","stream_id":"mqn1uu9w"}
+{"time":"2026-05-29T03:22:27.743589671Z","level":"INFO","msg":"stream: closed","id":"mqn1uu9w"}
