@@ -85,6 +85,9 @@ def parse_args():
                    help="Per-head dim in the AR predictor. heads×dim_head = inner attn dim. "
                         "LeWM Tab 6: 64 (ViT-S, 1024 inner) is +15 SR over 12 (ViT-T, 192 inner).")
     p.add_argument("--predictor-dropout", type=float, default=0.1)
+    p.add_argument("--use-proprio", action="store_true",
+                   help="Fuse proprioception (picker xyz + grip) into the predictor "
+                        "conditioning. See PROPRIO_FUSION.md. Requires /proprio in data.")
 
     p.add_argument("--sigreg-weight", type=float, default=0.09)
     p.add_argument("--no-sigreg", action="store_true")
@@ -206,6 +209,7 @@ def main():
         predictor_dropout=args.predictor_dropout,
         history_size=args.history_size, num_preds=args.num_preds,
         action_dim=args.frameskip * 8,  # 8D = 2 pickers × 4
+        proprio_dim=8, use_proprio=args.use_proprio,
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"model params: {n_params/1e6:.2f}M")

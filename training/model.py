@@ -243,16 +243,24 @@ class SIGReg(nn.Module):
 # ---------------------------------------------------------------------------
 
 class JEPA(nn.Module):
-    def __init__(self, encoder, predictor, action_encoder, projector=None, pred_proj=None):
+    def __init__(self, encoder, predictor, action_encoder, projector=None, pred_proj=None,
+                 proprio_encoder=None):
         super().__init__()
         self.encoder = encoder
         self.predictor = predictor
         self.action_encoder = action_encoder
+        # Optional proprio encoder. When present, proprioception (picker xyz +
+        # grip) is fused into the predictor's *conditioning* — NOT into `emb`
+        # (the goal-matched, SIGReg-regularized pixel latent). This gives the
+        # dynamics model explicit picker grounding while keeping goal-matching
+        # about rope shape only. See PROPRIO_FUSION.md.
+        self.proprio_encoder = proprio_encoder
         self.projector = projector if projector is not None else nn.Identity()
         self.pred_proj = pred_proj if pred_proj is not None else nn.Identity()
 
     def encode(self, batch):
-        """batch: dict with 'pixels' (B, T, C, H, W) and 'action' (B, T, A)."""
+        """batch: dict with 'pixels' (B, T, C, H, W), 'action' (B, T, A), and
+        optionally 'proprio' (B, T, P)."""
         pixels = batch["pixels"].float()
         b = pixels.size(0)
         pixels = rearrange(pixels, "b t c h w -> (b t) c h w")
@@ -260,11 +268,16 @@ class JEPA(nn.Module):
         emb = self.projector(cls)
         batch["emb"] = rearrange(emb, "(b t) d -> b t d", b=b)
         if "action" in batch:
-            batch["act_emb"] = self.action_encoder(batch["action"])
+            cond = self.action_encoder(batch["action"])
+            if self.proprio_encoder is not None and "proprio" in batch:
+                # Additive fusion: both embeddings live in D-dim space.
+                cond = cond + self.proprio_encoder(batch["proprio"])
+            batch["act_emb"] = cond  # "act_emb" now means predictor conditioning
         return batch
 
-    def predict(self, emb, act_emb):
-        preds = self.predictor(emb, act_emb)
+    def predict(self, emb, cond):
+        """cond = predictor conditioning (action, optionally + proprio)."""
+        preds = self.predictor(emb, cond)
         b = emb.size(0)
         preds = self.pred_proj(rearrange(preds, "b t d -> (b t) d"))
         return rearrange(preds, "(b t) d -> b t d", b=b)
@@ -288,6 +301,8 @@ def build_lewm(
     history_size: int = 3,
     num_preds: int = 1,
     action_dim: int = 8,
+    proprio_dim: int = 8,
+    use_proprio: bool = False,
     proj_hidden: int = 2048,
     use_bn_proj: bool = False,
 ):
@@ -307,13 +322,17 @@ def build_lewm(
     action_encoder = Embedder(input_dim=action_dim, emb_dim=embed_dim)
     projector = MLP(embed_dim, proj_hidden, embed_dim, use_bn=use_bn_proj)
     pred_proj = MLP(embed_dim, proj_hidden, embed_dim, use_bn=use_bn_proj)
-    return JEPA(encoder, predictor, action_encoder, projector, pred_proj)
+    proprio_encoder = Embedder(input_dim=proprio_dim, emb_dim=embed_dim) if use_proprio else None
+    return JEPA(encoder, predictor, action_encoder, projector, pred_proj,
+                proprio_encoder=proprio_encoder)
 
 
 def lewm_forward(model: JEPA, batch: dict, history_size: int, num_preds: int,
                  sigreg: Optional[SIGReg] = None, sigreg_weight: float = 0.09):
     """Mirrors le-wm-main/train.py:lejepa_forward."""
     batch["action"] = torch.nan_to_num(batch["action"], 0.0)
+    if "proprio" in batch:
+        batch["proprio"] = torch.nan_to_num(batch["proprio"], 0.0)
     out = model.encode(batch)
     emb = out["emb"]            # (B, T, D)
     act_emb = out["act_emb"]    # (B, T, D)
