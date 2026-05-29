@@ -77,7 +77,10 @@ class SubprocessSoftgym:
             return
         # The docker wrapper takes the command as a single quoted string and
         # runs it inside the container with the softgym env vars already set.
+        # SOFTGYM_STDIN=1 makes the wrapper pass `docker run -i` so the
+        # container keeps stdin open for our JSON command stream.
         cmd = [self.docker_script, "run", "python -u utils/env_server.py"]
+        proc_env = dict(os.environ, SOFTGYM_STDIN="1")
         self._proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -85,6 +88,7 @@ class SubprocessSoftgym:
             stderr=sys.stderr,
             text=True,
             bufsize=1,
+            env=proc_env,
         )
         # Initialize the env inside the server.
         resp = self._call({

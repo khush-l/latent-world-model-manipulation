@@ -82,7 +82,7 @@ def main():
     dones = []
     info_buf = {}
 
-    rgb, _ = render_rgb_depth(env, args.img_size, save_depth=False)
+    rgb, _ = render_rgb_depth(env, args.img_size, include_depth=False)
     pixels.append(rgb)
     states.append(extract_compact_state(num_picker))
     proprios.append(extract_proprio(env, num_picker))
@@ -98,7 +98,7 @@ def main():
                 info_buf.setdefault(k, []).append(float(np.asarray(v)))
             except Exception:
                 pass
-        rgb, _ = render_rgb_depth(env, args.img_size, save_depth=False)
+        rgb, _ = render_rgb_depth(env, args.img_size, include_depth=False)
         pixels.append(rgb)
         states.append(extract_compact_state(num_picker))
         proprios.append(extract_proprio(env, num_picker))

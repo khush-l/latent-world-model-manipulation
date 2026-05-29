@@ -35,11 +35,24 @@ import traceback
 
 import numpy as np
 
-# Make sure stdout flushes promptly (no python-side buffering).
-try:
-    sys.stdout.reconfigure(line_buffering=True)  # py3.7+, harmless if unavail
-except Exception:
-    pass
+# --- protocol channel isolation -------------------------------------------
+# SoftGym / PyFlex write diagnostics ("Pyflex init done!", "config 0: ...")
+# to stdout via both Python prints and C-level printf. That collides with our
+# JSON-over-stdout protocol. We therefore:
+#   1. dup the real stdout fd to a private file object (_PROTOCOL) for replies,
+#   2. redirect fd 1 (stdout) to fd 2 (stderr) so ALL noise — Python and C —
+#      goes to stderr, where the client ignores it.
+_PROTOCOL_FD = os.dup(1)
+_PROTOCOL = os.fdopen(_PROTOCOL_FD, "w")
+os.dup2(2, 1)          # C-level printf (pyflex) now writes to stderr
+sys.stdout = sys.stderr  # Python-level prints now write to stderr
+
+
+def _send(resp):
+    """Write one JSON reply on the private protocol channel."""
+    _PROTOCOL.write(json.dumps(resp) + "\n")
+    _PROTOCOL.flush()
+
 
 SIM_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if SIM_ROOT not in sys.path:
@@ -121,7 +134,7 @@ class EnvSession(object):
     def _render(self):
         import pyflex
         from utils.collect_trajectories import render_rgb_depth  # type: ignore
-        rgb, _ = render_rgb_depth(self.env, self.img_size, save_depth=False)
+        rgb, _ = render_rgb_depth(self.env, self.img_size, include_depth=False)
         return rgb  # uint8 (H, W, 3)
 
     def _state(self):
@@ -209,16 +222,14 @@ def main():
                 resp.update(session.step(action))
             elif cmd == "close":
                 resp = {"ok": True}
-                sys.stdout.write(json.dumps(resp) + "\n")
-                sys.stdout.flush()
+                _send(resp)
                 break
             else:
                 resp = {"ok": False, "error": "unknown cmd: %r" % cmd}
         except Exception as e:
             resp = {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
             _log("error: %s" % e)
-        sys.stdout.write(json.dumps(resp) + "\n")
-        sys.stdout.flush()
+        _send(resp)
 
 
 if __name__ == "__main__":

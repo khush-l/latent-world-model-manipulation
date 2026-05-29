@@ -43,7 +43,51 @@ sys.path.insert(0, str(PROJECT_ROOT / "eval"))
 from model import build_lewm  # noqa: E402
 from rollout import encode_pixels, rollout, goal_cost  # noqa: E402
 from cem_planner import CEMConfig, CEMPlanner  # noqa: E402
+from gradient_planner import GradientPlanConfig, GradientPlanner  # noqa: E402
 from sample_goals import sample_goals, goalspec_to_torch_inputs  # noqa: E402
+
+
+class RandomPlanner:
+    """Baseline: ignore the model + goal, return a uniform-random action.
+
+    Matches the planner interface (.plan / .reset) so the online eval loop
+    can swap it in for an apples-to-apples task-performance comparison.
+    """
+    def __init__(self, action_low, action_high, device):
+        self.low = action_low.to(device)
+        self.high = action_high.to(device)
+        self.device = device
+
+    def reset(self):
+        pass
+
+    def plan(self, pixels_history, goal_emb, history_actions):
+        u = torch.rand(self.low.numel(), device=self.device)
+        return self.low + u * (self.high - self.low)
+
+
+def _build_planner(args, model, action_low, action_high, device):
+    """Construct the planner selected by --planner."""
+    if args.planner == "random":
+        return RandomPlanner(action_low, action_high, device)
+    if args.planner == "cem":
+        return CEMPlanner(
+            model=model,
+            config=CEMConfig(num_samples=args.cem_samples, n_iters=args.cem_iters,
+                             topk=args.cem_topk, plan_horizon=args.plan_horizon),
+            action_low=action_low, action_high=action_high,
+            history_size=args.history_size, device=str(device),
+        )
+    elif args.planner == "gradient":
+        return GradientPlanner(
+            model=model,
+            config=GradientPlanConfig(plan_horizon=args.plan_horizon,
+                                      n_restarts=args.grad_restarts,
+                                      n_iters=args.grad_iters, lr=args.grad_lr),
+            action_low=action_low, action_high=action_high,
+            history_size=args.history_size, device=str(device),
+        )
+    raise ValueError("unknown planner: %r" % args.planner)
 
 
 # ---------------------------------------------------------------------------
@@ -244,19 +288,14 @@ def mode_online(args, model, device):
         min_perf=args.min_perf, seed=args.seed,
     )
 
-    # 2. CEM action bounds (RopeFlatten defaults).
+    # 2. Action bounds (RopeFlatten defaults).
     action_low = torch.tensor([-0.01, -0.01, -0.01, 0.0,
                                -0.01, -0.01, -0.01, 0.0], dtype=torch.float32)
     action_high = torch.tensor([0.01, 0.01, 0.01, 1.0,
                                 0.01, 0.01, 0.01, 1.0], dtype=torch.float32)
 
-    planner = CEMPlanner(
-        model=model,
-        config=CEMConfig(num_samples=args.cem_samples, n_iters=args.cem_iters,
-                         topk=args.cem_topk, plan_horizon=args.plan_horizon),
-        action_low=action_low, action_high=action_high,
-        history_size=args.history_size, device=device,
-    )
+    planner = _build_planner(args, model, action_low, action_high, device)
+    print(f"planner: {args.planner}")
 
     env = SubprocessSoftgym(
         env_name=args.env_name,
@@ -375,10 +414,17 @@ def parse_args():
 
     # planner hyperparams (defaults match LeWM paper)
     p.add_argument("--history-size", type=int, default=3)
+    p.add_argument("--planner", choices=("cem", "gradient", "random"), default="gradient",
+                   help="Planning algorithm. 'gradient' = our fast gradient-based "
+                        "latent planner; 'cem' = the paper's CEM baseline; "
+                        "'random' = uniform-random action baseline.")
     p.add_argument("--plan-horizon", type=int, default=5)
     p.add_argument("--cem-samples", type=int, default=300)
     p.add_argument("--cem-iters", type=int, default=30)
     p.add_argument("--cem-topk", type=int, default=30)
+    p.add_argument("--grad-restarts", type=int, default=32)
+    p.add_argument("--grad-iters", type=int, default=15)
+    p.add_argument("--grad-lr", type=float, default=0.1)
 
     # mode-specific
     p.add_argument("--replay-out-dir", default="eval/runs/replay")
