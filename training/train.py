@@ -250,37 +250,41 @@ def main():
             loss = out["loss"]
             optim.zero_grad(set_to_none=True)
             loss.backward()
-            # clip_grad_norm_ returns the *pre-clip* total norm — capture it
-            # whether or not we actually clip (use a huge max_norm if --grad-clip is 0).
-            grad_norm = float(torch.nn.utils.clip_grad_norm_(
+            # clip_grad_norm_ returns a CUDA tensor (the pre-clip total norm).
+            # Don't .item() it here — that's a per-step sync. We materialize
+            # the Python float only on logging steps below.
+            grad_norm_t = torch.nn.utils.clip_grad_norm_(
                 model.parameters(),
                 args.grad_clip if args.grad_clip else float("inf"),
-            ).item())
+            )
             optim.step()
 
-            elapsed = time.perf_counter() - t_start
-            metrics = {
-                "step": step,
-                "epoch": step / steps_per_epoch,
-                "loss": float(loss.item()),
-                "pred_loss": float(out["pred_loss"].item()),
-                "sigreg_loss": float(out["sigreg_loss"].item()),
-                "emb_std": float(out["emb_std"]),
-                "emb_mean": float(out["emb_mean"]),
-                "grad_norm": grad_norm,
-                "weight_norm": _total_param_norm(model),
-                "lr": float(optim.param_groups[0]["lr"]),
-                "steps_per_sec": (step + 1) / max(elapsed, 1e-6),
-                "elapsed_s": elapsed,
-            }
-            if device == "cuda":
-                metrics["peak_gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
-            if log_file is not None:
-                log_file.write(json.dumps(metrics) + "\n")
-            if wandb_run is not None:
-                wandb_run.log(metrics, step=step)
-            if step % args.log_every == 0 or step == args.steps - 1:
-                rate = (step + 1) / max(metrics["elapsed_s"], 1e-6)
+            # Only sync GPU + build metrics dict on logging steps. Between
+            # those, training runs lock-step with the GPU at full speed.
+            is_log_step = (step % args.log_every == 0) or (step == args.steps - 1)
+            if is_log_step:
+                elapsed = time.perf_counter() - t_start
+                metrics = {
+                    "step": step,
+                    "epoch": step / steps_per_epoch,
+                    "loss": float(loss.item()),
+                    "pred_loss": float(out["pred_loss"].item()),
+                    "sigreg_loss": float(out["sigreg_loss"].item()),
+                    "emb_std": float(out["emb_std"].item()),
+                    "emb_mean": float(out["emb_mean"].item()),
+                    "grad_norm": float(grad_norm_t.item()),
+                    "weight_norm": _total_param_norm(model),
+                    "lr": float(optim.param_groups[0]["lr"]),
+                    "steps_per_sec": (step + 1) / max(elapsed, 1e-6),
+                    "elapsed_s": elapsed,
+                }
+                if device == "cuda":
+                    metrics["peak_gpu_mem_mb"] = torch.cuda.max_memory_allocated() / 1e6
+                if log_file is not None:
+                    log_file.write(json.dumps(metrics) + "\n")
+                if wandb_run is not None:
+                    wandb_run.log(metrics, step=step)
+                rate = metrics["steps_per_sec"]
                 print(
                     f"step {step:5d} | loss {metrics['loss']:.5f} | "
                     f"pred {metrics['pred_loss']:.5f} | "

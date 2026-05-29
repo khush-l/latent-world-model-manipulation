@@ -163,8 +163,8 @@ class Embedder(nn.Module):
         )
 
     def forward(self, x):
-        # x: (B, T, D_in)
-        x = x.float()
+        # x: (B, T, D_in). Do NOT upcast to fp32 here — that breaks the
+        # autocast bf16 chain and forces a fp32 matmul on H100 tensor cores.
         x = x.permute(0, 2, 1)
         x = self.patch_embed(x)
         x = x.permute(0, 2, 1)
@@ -331,10 +331,12 @@ def lewm_forward(model: JEPA, batch: dict, history_size: int, num_preds: int,
         sig_loss = torch.zeros((), device=pred_loss.device)
         loss = pred_loss
 
+    # Return tensors (not Python floats) so the caller controls when to .item() —
+    # avoids per-step GPU syncs on H100. Caller should .item() only when logging.
     return {
         "loss": loss,
         "pred_loss": pred_loss.detach(),
         "sigreg_loss": sig_loss.detach(),
-        "emb_std": emb.detach().std().item(),
-        "emb_mean": emb.detach().mean().item(),
+        "emb_std": emb.detach().std(),
+        "emb_mean": emb.detach().mean(),
     }
