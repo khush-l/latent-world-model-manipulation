@@ -70,7 +70,7 @@ class HDF5SequenceDataset(Dataset):
 
     def __init__(self, h5_path, num_steps: int = 4, img_size: int = 224,
                  frameskip: int = 1, normalize_pixels: bool = True,
-                 cache_stats: Optional[dict] = None):
+                 cache_stats: Optional[dict] = None, cache_pixels: bool = False):
         super().__init__()
         self.h5_path = str(Path(h5_path).resolve())
         self.num_steps = num_steps
@@ -79,6 +79,14 @@ class HDF5SequenceDataset(Dataset):
         self.normalize_pixels = normalize_pixels
         # Per-worker handles, opened lazily in __getitem__.
         self._h5 = None
+        # Optional in-memory pixel cache (kills per-step gzip decompression).
+        self.cache_pixels = bool(cache_pixels)
+        self._pixels_cache = None
+        self._action_cache = None
+        self._proprio_cache = None
+        self._state_cache = None
+        self._epidx_cache = None
+        self._stepidx_cache = None
 
         with h5py.File(self.h5_path, "r") as f:
             for k in self.REQUIRED_KEYS:
@@ -100,6 +108,19 @@ class HDF5SequenceDataset(Dataset):
                     "state": _column_stats(f["state"][:]),
                 }
 
+            if self.cache_pixels:
+                # One-shot read of every column into RAM. Each worker shares
+                # the parent's numpy arrays via copy-on-write fork semantics,
+                # so we pay this memory cost once, not per worker.
+                print(f"  [HDF5SequenceDataset] caching dataset in RAM "
+                      f"(pixels={f['pixels'].nbytes/1e9:.2f} GB)...", flush=True)
+                self._pixels_cache  = f["pixels"][:]
+                self._action_cache  = f["action"][:].astype(np.float32)
+                self._proprio_cache = f["proprio"][:].astype(np.float32)
+                self._state_cache   = f["state"][:].astype(np.float32)
+                self._epidx_cache   = f["episode_idx"][:].astype(np.int64)
+                self._stepidx_cache = f["step_idx"][:].astype(np.int64)
+
         self.windows = _episode_windows(ep_idx, num_steps * frameskip)
         if not self.windows:
             raise ValueError(
@@ -119,10 +140,26 @@ class HDF5SequenceDataset(Dataset):
         start, length = self.windows[idx]
         rows = list(range(start, start + length, self.frameskip))
         rows = rows[: self.num_steps]
-        f = self._h()
+        rows_arr = np.asarray(rows)
 
-        pixels = f["pixels"][rows]  # (T, H, W, 3) uint8
-        pixels = pixels.astype(np.float32) / 255.0
+        # Read from in-memory cache when available, else lazy h5py read.
+        if self._pixels_cache is not None:
+            raw_pixels  = self._pixels_cache[rows_arr]
+            raw_action  = self._action_cache[rows_arr]
+            raw_proprio = self._proprio_cache[rows_arr]
+            raw_state   = self._state_cache[rows_arr]
+            raw_epidx   = self._epidx_cache[rows_arr]
+            raw_stepidx = self._stepidx_cache[rows_arr]
+        else:
+            f = self._h()
+            raw_pixels  = f["pixels"][rows]
+            raw_action  = f["action"][rows]
+            raw_proprio = f["proprio"][rows]
+            raw_state   = f["state"][rows]
+            raw_epidx   = f["episode_idx"][rows]
+            raw_stepidx = f["step_idx"][rows]
+
+        pixels = raw_pixels.astype(np.float32) / 255.0
         pixels = (pixels - IMAGENET_MEAN) / IMAGENET_STD if self.normalize_pixels else pixels
         pixels = np.transpose(pixels, (0, 3, 1, 2))  # (T, C, H, W)
         pixels = torch.from_numpy(np.ascontiguousarray(pixels))
@@ -138,10 +175,10 @@ class HDF5SequenceDataset(Dataset):
 
         sample = {
             "pixels": pixels,
-            "action": torch.from_numpy(_norm("action", f["action"][rows])),
-            "proprio": torch.from_numpy(_norm("proprio", f["proprio"][rows])),
-            "state": torch.from_numpy(_norm("state", f["state"][rows])),
-            "episode_idx": torch.from_numpy(np.asarray(f["episode_idx"][rows], dtype=np.int64)),
-            "step_idx": torch.from_numpy(np.asarray(f["step_idx"][rows], dtype=np.int64)),
+            "action":  torch.from_numpy(_norm("action",  raw_action)),
+            "proprio": torch.from_numpy(_norm("proprio", raw_proprio)),
+            "state":   torch.from_numpy(_norm("state",   raw_state)),
+            "episode_idx": torch.from_numpy(np.asarray(raw_epidx, dtype=np.int64)),
+            "step_idx":    torch.from_numpy(np.asarray(raw_stepidx, dtype=np.int64)),
         }
         return sample

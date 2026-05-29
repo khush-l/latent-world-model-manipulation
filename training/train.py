@@ -100,6 +100,12 @@ def parse_args():
                    help="Skip writing metrics.jsonl (stdout-only).")
     p.add_argument("--device", default=None)
     p.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
+    p.add_argument("--cache-pixels", action="store_true",
+                   help="Pre-load the entire HDF5 into RAM. Eliminates per-step "
+                        "gzip decompression — ~10x throughput on small datasets.")
+    p.add_argument("--compile", action="store_true",
+                   help="Wrap the model in torch.compile() — ~1.5-2x on H100. "
+                        "First step pays a ~1 min compile cost.")
 
     # wandb (opt-in; requires `pip install wandb` and `wandb login`)
     p.add_argument("--wandb", action="store_true",
@@ -124,12 +130,18 @@ def main():
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device}")
 
+    # Free perf knobs — TF32 matmuls + cuDNN heuristics. Both safe on H100.
+    if device == "cuda":
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cudnn.benchmark = True
+
     num_steps = args.history_size + args.num_preds
     dataset = HDF5SequenceDataset(
         h5_path=args.data,
         num_steps=num_steps,
         img_size=args.img_size,
         frameskip=args.frameskip,
+        cache_pixels=args.cache_pixels,
     )
     print(f"dataset: {len(dataset)} windows  (rows={dataset.n_rows}, "
           f"action_dim={dataset.action_dim}, proprio_dim={dataset.proprio_dim}, "
@@ -160,6 +172,10 @@ def main():
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"model params: {n_params/1e6:.2f}M")
+
+    if args.compile and device == "cuda":
+        print("compiling model with torch.compile() (first step pays ~1 min)...")
+        model = torch.compile(model)
 
     sigreg = None if args.no_sigreg else SIGReg().to(device)
 
@@ -206,6 +222,7 @@ def main():
     optim = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
         lr=args.lr, weight_decay=args.weight_decay,
+        fused=(device == "cuda"),  # ~5-10% speedup on CUDA, free win
     )
 
     autocast_ctx = (
