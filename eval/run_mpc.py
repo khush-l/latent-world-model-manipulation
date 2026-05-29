@@ -83,7 +83,8 @@ def _build_planner(args, model, action_low, action_high, device):
             model=model,
             config=GradientPlanConfig(plan_horizon=args.plan_horizon,
                                       n_restarts=args.grad_restarts,
-                                      n_iters=args.grad_iters, lr=args.grad_lr),
+                                      n_iters=args.grad_iters, lr=args.grad_lr,
+                                      action_reg=args.grad_action_reg),
             action_low=action_low, action_high=action_high,
             history_size=args.history_size, device=str(device),
         )
@@ -397,14 +398,143 @@ def mode_online(args, model, device):
 
 
 # ---------------------------------------------------------------------------
+# Mode: imitate (LeWM-protocol receding-horizon MPC toward reference subgoals)
+# ---------------------------------------------------------------------------
+
+def mode_imitate(args, model, device):
+    """Receding-horizon latent MPC toward subgoals from an expert reference
+    trajectory generated on the SAME rope (snapshot/restore).
+
+    Per episode:
+      1. reset env to a config
+      2. make_goal_trajectory() -> expert reference frames F[0..T] (flattens
+         the rope), env restored to start
+      3. for t in range(budget): goal = encode(F[min(t+k, T)]); plan; step
+      4. record achieved perf vs expert; render a GIF of the MPC rollout
+
+    With --goal-offset swept this characterizes the planning horizon.
+    """
+    import collections
+    import imageio.v2 as iio
+    from env_client import SubprocessSoftgym
+    from sample_goals import _to_imagenet_float
+
+    out_dir = Path(args.imitate_out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    gif_dir = out_dir / "gifs"; gif_dir.mkdir(exist_ok=True)
+
+    # Cap the planner's per-step picker motion (the env applies action_repeat=8,
+    # so the full +/-0.01 range = 8cm/step lets the planner fling the rope out of
+    # frame by exploiting model errors). Scaling the delta bounds — mirroring the
+    # scripted policy's max_speed_scale — keeps manipulation gentle and on-screen.
+    s = args.plan_action_scale
+    action_low = torch.tensor([-0.01*s, -0.01*s, -0.01*s, 0.0, -0.01*s, -0.01*s, -0.01*s, 0.0])
+    action_high = torch.tensor([0.01*s, 0.01*s, 0.01*s, 1.0, 0.01*s, 0.01*s, 0.01*s, 1.0])
+    planner = _build_planner(args, model, action_low, action_high, device)
+    A = action_low.numel()
+    k = args.goal_offset
+
+    env = SubprocessSoftgym(env_name=args.env_name, num_variations=args.num_variations,
+                            img_size=args.img_size, num_picker=2, headless=True, render=True)
+
+    def enc_goal(frame_uint8):
+        chw = _to_imagenet_float(frame_uint8)
+        t = torch.from_numpy(chw).float().to(device)
+        return encode_pixels(model, t.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
+
+    summary = []
+    try:
+        for i in range(args.n_episodes):
+            cfg_id = (args.seed + i) % args.num_variations
+            obs = env.reset(config_id=cfg_id, seed=args.seed + i)
+
+            # Expert reference on THIS rope (env restored afterward).
+            ref_frames, ref_perfs = env.make_goal_trajectory(n_steps=args.eval_budget)
+            expert_final = float(ref_perfs[-1]) if ref_perfs else 0.0
+            expert_max = float(max(ref_perfs)) if ref_perfs else 0.0
+            T_ref = len(ref_frames)
+
+            # History buffers.
+            init_px = torch.from_numpy(_to_imagenet_float(obs["pixels"])).float().to(device)
+            pixel_hist = collections.deque([init_px] * args.history_size, maxlen=args.history_size)
+            action_hist = collections.deque([torch.zeros(A, device=device)] * args.history_size,
+                                            maxlen=args.history_size)
+            planner.reset()
+
+            rollout_frames = [obs["pixels"]]
+            perfs = []
+            lat = []
+            for t in range(args.eval_budget):
+                goal_idx = min(t + k, T_ref - 1)
+                goal_emb = enc_goal(ref_frames[goal_idx])
+                px = torch.stack(list(pixel_hist), dim=0)
+                act = torch.stack(list(action_hist), dim=0)
+
+                t0 = time.perf_counter()
+                first_action = planner.plan(px, goal_emb, act)
+                if str(device) == "cuda":
+                    torch.cuda.synchronize()
+                lat.append(time.perf_counter() - t0)
+
+                step_out = env.step(first_action.cpu().numpy().astype(np.float32))
+                perf = float(step_out["info"].get("normalized_performance",
+                                                  step_out["info"].get("performance", 0.0)))
+                perfs.append(perf)
+                rollout_frames.append(step_out["pixels"])
+                pixel_hist.append(torch.from_numpy(_to_imagenet_float(step_out["pixels"])).float().to(device))
+                action_hist.append(first_action.detach())
+                if step_out["done"]:
+                    break
+
+            mpc_final = perfs[-1] if perfs else 0.0
+            mpc_max = max(perfs) if perfs else 0.0
+            print(f"  [{i+1}/{args.n_episodes}] cfg={cfg_id}  "
+                  f"MPC final={mpc_final:.3f} max={mpc_max:.3f}  |  "
+                  f"expert final={expert_final:.3f} max={expert_max:.3f}  |  "
+                  f"lat={np.mean(lat)*1000:.0f}ms")
+
+            # GIF: MPC rollout next to the expert reference (side by side).
+            if args.save_gifs:
+                n = min(len(rollout_frames), T_ref)
+                pair = [np.concatenate([rollout_frames[j],
+                                        np.full((args.img_size, 6, 3), 255, np.uint8),
+                                        ref_frames[min(j, T_ref - 1)]], axis=1)
+                        for j in range(n)]
+                iio.mimsave(gif_dir / f"ep{i:03d}_cfg{cfg_id}.gif", pair, duration=0.1, loop=0)
+
+            summary.append({"episode": i, "config_id": cfg_id, "goal_offset": k,
+                            "mpc_final": mpc_final, "mpc_max": mpc_max,
+                            "expert_final": expert_final, "expert_max": expert_max,
+                            "start_perf": float(ref_perfs[0]) if ref_perfs else 0.0,
+                            "mean_plan_lat_s": float(np.mean(lat))})
+    finally:
+        env.close()
+
+    mpc_f = np.array([s["mpc_final"] for s in summary])
+    exp_f = np.array([s["expert_final"] for s in summary])
+    start = np.array([s["start_perf"] for s in summary])
+    print("\n========== IMITATE SUMMARY (goal_offset=%d) ==========" % k)
+    print(f"episodes:        {len(summary)}")
+    print(f"start perf:      mean={start.mean():.3f}")
+    print(f"MPC final perf:  mean={mpc_f.mean():.3f}  median={np.median(mpc_f):.3f}")
+    print(f"expert final:    mean={exp_f.mean():.3f}  (upper bound)")
+    print(f"MPC improvement over start: {(mpc_f - start).mean():+.3f}")
+    print(f"MPC / expert ratio:         {mpc_f.mean()/max(exp_f.mean(),1e-6):.1%}")
+    (out_dir / f"summary_k{k}.json").write_text(json.dumps(summary, indent=2))
+    print(f"wrote {out_dir}/summary_k{k}.json  (+ gifs in {gif_dir})")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--ckpt", required=True, help="Path to trained model checkpoint (.pt)")
-    p.add_argument("--eval-h5", required=True, help="Held-out v3 HDF5 file for goals")
-    p.add_argument("--mode", choices=("validate", "replay", "online"), default="validate")
+    p.add_argument("--eval-h5", default=None,
+                   help="v3 HDF5 file for goals (required for validate/replay/online; "
+                        "unused by imitate, which generates references from the env).")
+    p.add_argument("--mode", choices=("validate", "replay", "online", "imitate"), default="validate")
     p.add_argument("--n-episodes", type=int, default=5)
     p.add_argument("--goal-strategy", choices=("terminal", "subgoal", "high_perf"),
                    default="high_perf")
@@ -425,10 +555,23 @@ def parse_args():
     p.add_argument("--grad-restarts", type=int, default=32)
     p.add_argument("--grad-iters", type=int, default=15)
     p.add_argument("--grad-lr", type=float, default=0.1)
+    p.add_argument("--grad-action-reg", type=float, default=0.0,
+                   help="L2 penalty on action magnitude in the gradient planner "
+                        "(discourages large/flinging actions).")
+    p.add_argument("--plan-action-scale", type=float, default=0.4,
+                   help="Scale on the planner's xyz delta bounds (imitate mode). "
+                        "0.4 ≈ scripted policy's max_speed_scale; keeps motion gentle.")
 
     # mode-specific
     p.add_argument("--replay-out-dir", default="eval/runs/replay")
     p.add_argument("--online-out-dir", default="eval/runs/online")
+    # imitate mode
+    p.add_argument("--imitate-out-dir", default="eval/runs/imitate")
+    p.add_argument("--goal-offset", type=int, default=5,
+                   help="Subgoal offset k: goal = reference frame min(t+k, T) ahead. "
+                        "Sweep this to characterize the planning horizon.")
+    p.add_argument("--save-gifs", action="store_true",
+                   help="Save MPC-vs-expert side-by-side GIFs per episode (imitate mode).")
     p.add_argument("--env-name", default="RopeFlatten")
     p.add_argument("--num-variations", type=int, default=200)
     p.add_argument("--eval-budget", type=int, default=75,
@@ -473,6 +616,7 @@ def main():
         "validate": mode_validate,
         "replay":   mode_replay,
         "online":   mode_online,
+        "imitate":  mode_imitate,
     }[args.mode](args, model, device)
 
 

@@ -130,6 +130,18 @@ class SubprocessSoftgym:
             "info":    resp.get("info", {}),
         }
 
+    def make_goal_trajectory(self, n_steps: int = 75, noise_scale: float = 0.02):
+        """Generate an expert reference trajectory on the current rope (the env
+        is restored to its pre-call state afterward).
+
+        Returns (frames, perfs):
+            frames: (n_steps+1, H, W, 3) uint8
+            perfs:  list[float] normalized_performance per step
+        """
+        resp = self._call({"cmd": "make_goal_trajectory",
+                           "n_steps": int(n_steps), "noise_scale": float(noise_scale)})
+        return _decode_ndarray(resp["frames"]), resp["perfs"]
+
     def step(self, action: np.ndarray):
         resp = self._call({"cmd": "step", "action": _encode_ndarray(action.astype(np.float32))})
         return {

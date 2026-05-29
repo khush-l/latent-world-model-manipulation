@@ -125,6 +125,7 @@ class EnvSession(object):
             kwargs["render_mode"] = render_mode
 
         self.env = env_class(**kwargs)
+        self.env_name = env_name
         self.img_size = int(img_size)
         self.num_picker = int(num_picker)
         self.action_dim = int(getattr(self.env.action_space, "shape", (4 * num_picker,))[0])
@@ -164,6 +165,43 @@ class EnvSession(object):
             "proprio": _encode_ndarray(proprio),
             "info": {},
         }
+
+    def make_goal_trajectory(self, n_steps, noise_scale=0.02):
+        """Generate an expert reference trajectory ON THE CURRENT ROPE, then
+        restore the env to its current state.
+
+        Snapshots env state, runs the scripted geometric expert for `n_steps`,
+        recording a rendered frame + normalized_performance at each step, then
+        restores the snapshot so the caller's env is untouched.
+
+        Returns (frames, perfs):
+          frames: (n_steps+1, H, W, 3) uint8 — the expert's flattening sequence
+          perfs:  list of normalized_performance per step
+        These frames become the reference whose k-ahead entries are MPC goals.
+        """
+        import pyflex  # noqa: F401
+        from geometric_policy import make_policy  # type: ignore
+
+        snapshot = self.env.get_state()
+        policy = make_policy(self.env_name, self.env, self.num_picker, kind="geometric",
+                             noise_scale=noise_scale)
+        policy.reset()
+
+        frames = [self._render()]
+        perfs = []
+        for _ in range(int(n_steps)):
+            action = policy.get_action()
+            _, _, done, info = self.env.step(action)
+            frames.append(self._render())
+            perfs.append(float(info.get("normalized_performance",
+                                        info.get("performance", 0.0))))
+            if done:
+                break
+
+        # Restore the env to exactly where it was before the expert rollout.
+        self.env.set_state(snapshot)
+
+        return np.asarray(frames, dtype=np.uint8), perfs
 
     def step(self, action):
         action = np.asarray(action, dtype=np.float32)
@@ -220,6 +258,12 @@ def main():
                          else np.asarray(req["action"], dtype=np.float32)
                 resp = {"ok": True}
                 resp.update(session.step(action))
+            elif cmd == "make_goal_trajectory":
+                frames, perfs = session.make_goal_trajectory(
+                    n_steps=int(req.get("n_steps", 75)),
+                    noise_scale=float(req.get("noise_scale", 0.02)),
+                )
+                resp = {"ok": True, "frames": _encode_ndarray(frames), "perfs": perfs}
             elif cmd == "close":
                 resp = {"ok": True}
                 _send(resp)
