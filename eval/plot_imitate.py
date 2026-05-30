@@ -107,8 +107,8 @@ def fig_success_bar(runs_dir, k, out, thresh=0.8):
     """Success rate by method at offset k. Success = the MPC rollout reached a
     normalized performance > `thresh` (i.e. a flattened rope)."""
     specs = [
-        ("random_k%d" % k,    "Random",  "#9e9e9e"),
-        ("grad_prop_k%d" % k, "MPC",     "#1e88e5"),
+        ("mpc_random_k%d" % k, "Random",  "#9e9e9e"),
+        ("mpc_lewm_k%d" % k,   "MPC",     "#1e88e5"),
     ]
     labels, rates, ns, colors = [], [], [], []
     for d, name, c in specs:
