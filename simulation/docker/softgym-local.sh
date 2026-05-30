@@ -45,6 +45,7 @@ docker_common_args() {
     -e NVIDIA_DRIVER_CAPABILITIES=all
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
+    -e "SOFTGYM_PICKER_COLOR=${SOFTGYM_PICKER_COLOR:-}"
     -v "$DOCKER_REPO_ROOT:$CONTAINER_ROOT"
     -w "$CONTAINER_ROOT"
   )
