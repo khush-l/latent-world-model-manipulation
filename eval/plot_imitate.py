@@ -107,8 +107,8 @@ def fig_success_bar(runs_dir, k, out, thresh=0.8):
     """Success rate by method at offset k. Success = the MPC rollout reached a
     normalized performance > `thresh` (i.e. a flattened rope)."""
     specs = [
-        ("random_k%d" % k,    "Random",          "#9e9e9e"),
-        ("grad_base_k%d" % k, "MPC",             "#1e88e5"),
+        ("random_k%d" % k,    "Random",  "#9e9e9e"),
+        ("grad_prop_k%d" % k, "MPC",     "#1e88e5"),
     ]
     labels, rates, ns, colors = [], [], [], []
     for d, name, c in specs:
@@ -140,8 +140,7 @@ def fig_success_vs_k(runs_dir, ks, out, thresh=0.8):
     """Success rate vs planning horizon k, with the random baseline as a line.
     Success = reached normalized performance > `thresh`."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for tmpl, name, c, mk in [("grad_base_k%d", "MPC", "#1e88e5", "o"),
-                              ("grad_prop_k%d", "MPC + proprio", "#43a047", "s")]:
+    for tmpl, name, c, mk in [("grad_prop_k%d", "MPC", "#1e88e5", "o")]:
         xs, ys = [], []
         for k in ks:
             eps = _load_run(Path(runs_dir) / (tmpl % k))
