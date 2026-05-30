@@ -68,9 +68,65 @@ def parse_args():
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
-        choices=("random",),
+        choices=("random", "geometric", "manipulate"),
         default="random",
-        help="Behavior policy. Only random is implemented here.",
+        help="Behavior policy. 'random' = uniform sample over action space. "
+             "'geometric' = scripted state-machine policy (currently only "
+             "RopeFlatten — grabs endpoints and stretches). "
+             "'manipulate' = scripted free-form policy that grabs random "
+             "middle rope particles and walks them through smooth waypoints "
+             "(creates diverse rope configurations instead of always flat).",
+    )
+    parser.add_argument(
+        "--script-num-waypoints",
+        type=int,
+        default=3,
+        help="Number of random waypoints per picker for --policy manipulate.",
+    )
+    parser.add_argument(
+        "--script-noise-scale",
+        type=float,
+        default=0.02,
+        help="Gaussian noise sigma on scripted-policy deltas, as fraction of "
+             "the commanded magnitude. Auto-shrinks near target so HOLD phases "
+             "don't jitter. 0 = deterministic. Used only with --policy geometric.",
+    )
+    parser.add_argument(
+        "--script-lateral-scale",
+        type=float,
+        default=1.0,
+        help="Final endpoint-separation as a fraction of rope natural length. "
+             "1.0 = stretch to natural length. Used only with --policy geometric.",
+    )
+    parser.add_argument(
+        "--script-lift-height",
+        type=float,
+        default=0.05,
+        help="How high (meters) to lift gripped endpoints. "
+             "Used only with --policy geometric.",
+    )
+    parser.add_argument(
+        "--script-action-gain",
+        type=float,
+        default=0.3,
+        help="Proportional gain for picker position error. <1.0 produces "
+             "smooth deceleration near targets (1.0 = bang-bang).",
+    )
+    parser.add_argument(
+        "--script-max-speed-scale",
+        type=float,
+        default=0.35,
+        help="Fraction of env max action delta that the scripted policy is "
+             "allowed to command. Lowers picker top speed (e.g. 0.35 = 35%% "
+             "of env max → ~2.8 cm per env step instead of 8 cm).",
+    )
+    parser.add_argument(
+        "--script-deadband",
+        type=float,
+        default=5e-4,
+        help="Per-axis commanded-delta deadband (meters/substep). Any |delta| "
+             "below this is zeroed — eliminates proportional-control jitter "
+             "during HOLD/GRIP phases where the picker should be stationary.",
     )
     return parser.parse_args()
 
@@ -263,8 +319,30 @@ def collect_episode(env, args, episode_idx, env_kwargs):
     if args.save_full_state:
         append_state(full_state_buffers, extract_state_arrays(env))
 
+    policy_obj = None
+    if args.policy in ("geometric", "manipulate"):
+        from geometric_policy import make_policy
+        policy_obj = make_policy(
+            env_name=args.env_name,
+            env=env,
+            num_picker=num_picker,
+            noise_scale=args.script_noise_scale,
+            lateral_scale=args.script_lateral_scale,
+            lift_height=args.script_lift_height,
+            action_gain=args.script_action_gain,
+            max_speed_scale=args.script_max_speed_scale,
+            deadband=args.script_deadband,
+            kind=args.policy,
+            num_waypoints=args.script_num_waypoints,
+            rng=np.random.RandomState(args.seed + episode_idx),
+        )
+        policy_obj.reset()
+
     for _ in range(env.horizon):
-        action_raw = sample_action(env.action_space)
+        if policy_obj is not None:
+            action_raw = policy_obj.get_action()
+        else:
+            action_raw = sample_action(env.action_space)
         _, reward, done, info = env.step(action_raw)
 
         actions.append(np.asarray(action_raw, dtype=np.float32).copy())
@@ -305,6 +383,16 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "proprio_dim": int(proprio_dim),
         "state_dim": int(STATE_DIM),
     }
+    if args.policy in ("geometric", "manipulate"):
+        metadata["behavior_policy"] = "rope_" + args.policy
+        metadata["script_noise_scale"] = float(args.script_noise_scale)
+        metadata["script_lateral_scale"] = float(args.script_lateral_scale)
+        metadata["script_lift_height"] = float(args.script_lift_height)
+        metadata["script_action_gain"] = float(args.script_action_gain)
+        metadata["script_max_speed_scale"] = float(args.script_max_speed_scale)
+        metadata["script_deadband"] = float(args.script_deadband)
+        if args.policy == "manipulate":
+            metadata["script_num_waypoints"] = int(args.script_num_waypoints)
 
     pixels_arr = np.asarray(pixel_frames, dtype=np.uint8)
     action_arr = np.asarray(actions, dtype=np.float32)

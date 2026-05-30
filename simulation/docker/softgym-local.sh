@@ -49,6 +49,13 @@ docker_common_args() {
     -w "$CONTAINER_ROOT"
   )
 
+  # Keep STDIN open when SOFTGYM_STDIN=1 — required for the env_server IPC
+  # bridge (eval/env_client.py pipes JSON commands to the container's stdin).
+  # Harmless to omit for non-interactive uses (collect, compile, benchmark).
+  if [[ "${SOFTGYM_STDIN:-0}" == "1" ]]; then
+    args+=(-i)
+  fi
+
   if [[ -n "${DISPLAY:-}" && -d /mnt/wslg/.X11-unix ]]; then
     args+=(
       -v /mnt/wslg/.X11-unix:/tmp/.X11-unix
