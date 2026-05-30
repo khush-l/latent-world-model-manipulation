@@ -209,33 +209,24 @@ def fig_within_episode(runs_dir, k, out):
     """Normalized performance vs env step (mean ± SEM), MPC vs expert."""
     T = 76
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    any_plotted = False
-    for tmpl, name, c in [("grad_base_k%d", "MPC baseline", "#1e88e5"),
-                          ("grad_prop_k%d", "MPC proprio",  "#43a047")]:
-        eps = _load_run(Path(runs_dir) / (tmpl % k))
-        if not eps:
-            continue
-        mean, sem = _mean_curve(eps, "mpc_perf_curve", T)
-        if mean is None:
-            continue
-        t = np.arange(len(mean))
-        ax.plot(t, mean, color=c, label=name, linewidth=2)
-        ax.fill_between(t, mean - sem, mean + sem, color=c, alpha=0.2)
-        any_plotted = True
-    # expert reference (use whichever run we have)
-    for tmpl in ("grad_base_k%d", "grad_prop_k%d"):
-        eps = _load_run(Path(runs_dir) / (tmpl % k))
-        if eps:
-            mean, _ = _mean_curve(eps, "expert_perf_curve", T)
-            if mean is not None:
-                ax.plot(np.arange(len(mean)), mean, color="black", linestyle="--",
-                        label="Expert (scripted)", linewidth=1.8)
-            break
-    if not any_plotted:
+    eps = _load_run(Path(runs_dir) / ("mpc_lewm_k%d" % k))
+    rnd = _load_run(Path(runs_dir) / ("mpc_random_k%d" % k))
+    if not eps:
         print("  [within_episode] no runs found — skipping")
         plt.close(fig); return
+    mean, sem = _mean_curve(eps, "mpc_perf_curve", T)
+    t = np.arange(len(mean))
+    start = float(np.mean([e["start_perf"] for e in eps]))
+    ax.axhline(start, color="#888", linestyle=":", linewidth=1.3, label=f"start ({start:.2f})")
+    ax.plot(t, mean, color="#1e88e5", label="MPC", linewidth=2.2)
+    ax.fill_between(t, mean - sem, mean + sem, color="#1e88e5", alpha=0.2)
+    if rnd:
+        rmean, _ = _mean_curve(rnd, "mpc_perf_curve", T)
+        ax.plot(np.arange(len(rmean)), rmean, color="#9e9e9e", label="Random", linewidth=1.8)
+    ax.axhline(0.8, color="#43a047", linestyle="--", linewidth=1.3, label="success (0.8)")
     ax.set_xlabel("Env step"); ax.set_ylabel("Normalized performance")
-    ax.set_title(f"RopeFlatten: within-episode flattening (k={k}, mean ± SEM)")
+    ax.set_ylim(0, 1)
+    ax.set_title(f"RopeFlatten: within-episode performance (MPC vs Random, mean ± SEM, n={len(eps)})")
     ax.grid(alpha=0.3); ax.legend()
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
     print(f"  wrote {out}")
