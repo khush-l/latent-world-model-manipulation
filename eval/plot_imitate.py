@@ -136,6 +136,35 @@ def fig_success_bar(runs_dir, k, out, thresh=0.8):
     print(f"  wrote {out}")
 
 
+def fig_success_latency(runs_dir, k, out, thresh=0.8):
+    """Two bars for the MPC planner: success rate (%) and mean planning
+    latency per step (s), on a twin y-axis."""
+    eps = _load_run(Path(runs_dir) / ("mpc_lewm_k%d" % k))
+    if not eps:
+        print("  [success_latency] no MPC run found — skipping")
+        return
+    sr = 100 * np.mean([e["mpc_max"] > thresh for e in eps])
+    lat = float(np.mean([e["mean_plan_lat_s"] for e in eps]))
+    n = len(eps)
+
+    fig, ax1 = plt.subplots(figsize=(6, 4.5))
+    ax2 = ax1.twinx()
+    ax1.bar([0], [sr], width=0.6, color="#1e88e5", edgecolor="black", linewidth=0.6)
+    ax2.bar([1], [lat], width=0.6, color="#ff9800", edgecolor="black", linewidth=0.6)
+
+    ax1.text(0, sr + 2, f"{sr:.0f}%", ha="center", va="bottom", fontsize=13, fontweight="bold")
+    ax2.text(1, lat + 0.03, f"{lat:.2f} s", ha="center", va="bottom", fontsize=13, fontweight="bold")
+
+    ax1.set_xticks([0, 1]); ax1.set_xticklabels(["Success rate", "Planning latency"], fontsize=11)
+    ax1.set_ylabel("Success rate (%)", color="#1e88e5")
+    ax2.set_ylabel("Latency per step (s)", color="#ff9800")
+    ax1.set_ylim(0, 100); ax2.set_ylim(0, max(lat * 1.6, 0.5))
+    ax1.tick_params(axis="y", colors="#1e88e5"); ax2.tick_params(axis="y", colors="#ff9800")
+    ax1.set_title(f"MPC on RopeFlatten (CEM, n={n})")
+    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+    print(f"  wrote {out}")
+
+
 def fig_success_vs_k(runs_dir, ks, out, thresh=0.8):
     """Success rate vs planning horizon k, with the random baseline as a line.
     Success = reached normalized performance > `thresh`."""
@@ -245,6 +274,7 @@ def main():
     ks = [int(x) for x in args.ks.split(",")]
 
     fig_success_bar(args.runs_dir, args.k_bar, out_dir / "success_rate.png")
+    fig_success_latency(args.runs_dir, args.k_bar, out_dir / "success_latency.png")
     fig_success_vs_k(args.runs_dir, ks, out_dir / "success_vs_k.png")
     fig_method_bar(args.runs_dir, args.k_bar, out_dir / "method_bar.png")
     fig_horizon_curve(args.runs_dir, ks, out_dir / "horizon_curve.png")
