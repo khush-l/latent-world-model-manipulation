@@ -103,9 +103,9 @@ def fig_method_bar(runs_dir, k, out):
     print(f"  wrote {out}")
 
 
-def fig_success_bar(runs_dir, k, out, margin=0.10):
-    """Success rate by method at offset k. Success = the MPC rollout flattened
-    the rope by >= `margin` normalized performance above its start state."""
+def fig_success_bar(runs_dir, k, out, thresh=0.8):
+    """Success rate by method at offset k. Success = the MPC rollout reached a
+    normalized performance > `thresh` (i.e. a flattened rope)."""
     specs = [
         ("random_k%d" % k,    "Random",          "#9e9e9e"),
         ("grad_base_k%d" % k, "MPC",             "#1e88e5"),
@@ -116,7 +116,7 @@ def fig_success_bar(runs_dir, k, out, margin=0.10):
         eps = _load_run(Path(runs_dir) / d)
         if not eps:
             continue
-        succ = np.array([(e["mpc_max"] - e["start_perf"]) >= margin for e in eps], dtype=float)
+        succ = np.array([e["mpc_max"] > thresh for e in eps], dtype=float)
         labels.append(name); rates.append(100 * succ.mean()); ns.append(len(eps)); colors.append(c)
     if not labels:
         print("  [success_bar] no runs found — skipping")
@@ -131,15 +131,15 @@ def fig_success_bar(runs_dir, k, out, margin=0.10):
     ax.set_ylabel("MPC rollout success rate (%)")
     ax.set_ylim(0, 100)
     ax.set_title(f"RopeFlatten: MPC success rate (k={k})\n"
-                 f"success = flattened by ≥ {margin:g} normalized performance over start")
+                 f"success = reached normalized performance > {thresh:g}")
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
     print(f"  wrote {out}")
 
 
-def fig_success_vs_k(runs_dir, ks, out, margin=0.10):
-    """Success rate vs planning horizon k (gradient planner), with the random
-    baseline as a reference line."""
+def fig_success_vs_k(runs_dir, ks, out, thresh=0.8):
+    """Success rate vs planning horizon k, with the random baseline as a line.
+    Success = reached normalized performance > `thresh`."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
     for tmpl, name, c, mk in [("grad_base_k%d", "MPC", "#1e88e5", "o"),
                               ("grad_prop_k%d", "MPC + proprio", "#43a047", "s")]:
@@ -148,15 +148,15 @@ def fig_success_vs_k(runs_dir, ks, out, margin=0.10):
             eps = _load_run(Path(runs_dir) / (tmpl % k))
             if not eps:
                 continue
-            xs.append(k); ys.append(100 * np.mean([(e["mpc_max"] - e["start_perf"]) >= margin for e in eps]))
+            xs.append(k); ys.append(100 * np.mean([e["mpc_max"] > thresh for e in eps]))
         if xs:
             ax.plot(xs, ys, marker=mk, color=c, label=name, linewidth=2, markersize=7)
-    rnd = _load_run(Path(runs_dir) / ("random_k%d" % ks[min(1, len(ks)-1)])) or _load_run(Path(runs_dir) / "random_k5")
+    rnd = _load_run(Path(runs_dir) / "random_k5")
     if rnd:
-        r = 100 * np.mean([(e["mpc_max"] - e["start_perf"]) >= margin for e in rnd])
+        r = 100 * np.mean([e["mpc_max"] > thresh for e in rnd])
         ax.axhline(r, color="#9e9e9e", linestyle="--", linewidth=1.6, label=f"Random ({r:.0f}%)")
     ax.set_xlabel("Goal offset k"); ax.set_ylabel("MPC success rate (%)")
-    ax.set_ylim(0, 100); ax.set_title(f"MPC success rate vs planning horizon (≥{margin:g} flatten)")
+    ax.set_ylim(0, 100); ax.set_title(f"MPC success rate vs planning horizon (perf > {thresh:g})")
     ax.grid(alpha=0.3); ax.legend()
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
     print(f"  wrote {out}")
