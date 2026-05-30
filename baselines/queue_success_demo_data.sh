@@ -18,6 +18,7 @@ case "$TASK" in
   rope)
     ENV_NAME=RopeFlatten
     POLICY=rope_geometric_v2
+    HORIZON=75
     INSTRUCTION="straighten the rope"
     REPO_ID="khush/softgym-ropeflatten-success-demos"
     EXISTING_DIR="simulation/data/trajectories/khush_scripted_rope_vla_150"
@@ -28,10 +29,12 @@ case "$TASK" in
     THRESHOLD=0.80
     MIN_EPISODES=100
     TOP_K=300
+    FULL_EPISODES=1000
     ;;
   cloth)
     ENV_NAME=ClothFlatten
-    POLICY=cloth_geometric_v2
+    POLICY=cloth_corner_oracle
+    HORIZON=150
     INSTRUCTION="flatten the cloth"
     REPO_ID="khush/softgym-clothflatten-success-demos"
     EXISTING_DIR="simulation/data/trajectories/khush_scripted_cloth_vla_150"
@@ -42,6 +45,7 @@ case "$TASK" in
     THRESHOLD=0.55
     MIN_EPISODES=100
     TOP_K=300
+    FULL_EPISODES=2500
     ;;
   *)
     echo "TASK must be rope or cloth" >&2
@@ -60,7 +64,7 @@ case "$MODE" in
       --env-name "$ENV_NAME" \
       --policy "$POLICY" \
       --num-episodes 50 \
-      --horizon 75 \
+      --horizon "$HORIZON" \
       --img-size 128 \
       --num-variations 50 \
       --script-noise-scale 0.02 \
@@ -77,8 +81,8 @@ case "$MODE" in
     SOFTGYM_SOFTWARE_GL=0 ./simulation/docker/collect-trajectories.sh \
       --env-name "$ENV_NAME" \
       --policy "$POLICY" \
-      --num-episodes 1000 \
-      --horizon 75 \
+      --num-episodes "$FULL_EPISODES" \
+      --horizon "$HORIZON" \
       --img-size 128 \
       --num-variations 1000 \
       --script-noise-scale 0.02 \

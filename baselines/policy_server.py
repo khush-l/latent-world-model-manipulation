@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -23,6 +24,7 @@ import torch
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+from lerobot.utils.constants import ACTION
 
 
 class PolicyRuntime:
@@ -39,12 +41,20 @@ class PolicyRuntime:
             self.cfg, pretrained_path=str(checkpoint)
         )
         self.n_predictions = 0
+        self.latency_ms = []
+
+    def _action_queue_len(self) -> int | None:
+        if hasattr(self.policy, "_action_queue"):
+            return len(self.policy._action_queue)
+        if hasattr(self.policy, "_queues") and ACTION in self.policy._queues:
+            return len(self.policy._queues[ACTION])
+        return None
 
     def reset(self):
         if hasattr(self.policy, "reset"):
             self.policy.reset()
 
-    def predict(self, image_hwc: np.ndarray, state: np.ndarray, task: str | None = None) -> np.ndarray:
+    def predict(self, image_hwc: np.ndarray, state: np.ndarray, task: str | None = None):
         if image_hwc.ndim != 3 or image_hwc.shape[-1] != 3:
             raise ValueError(f"expected image HWC RGB, got {image_hwc.shape}")
         if state.shape != (23,):
@@ -57,16 +67,31 @@ class PolicyRuntime:
             "task": task or self.task,
         }
         batch = self.preprocessor(obs)
+        queue_len_before = self._action_queue_len()
+        if str(self.device).startswith("cuda"):
+            torch.cuda.synchronize(self.device)
+        start = time.perf_counter()
         with torch.no_grad():
             action = self.policy.select_action(batch)
             action = self.postprocessor(action)
+        if str(self.device).startswith("cuda"):
+            torch.cuda.synchronize(self.device)
+        latency_ms = (time.perf_counter() - start) * 1000.0
+        queue_len_after = self._action_queue_len()
         if isinstance(action, torch.Tensor):
             action_np = action.detach().cpu().numpy()
         else:
             action_np = np.asarray(action)
         action_np = action_np.reshape(-1).astype(np.float32)
         self.n_predictions += 1
-        return action_np
+        self.latency_ms.append(float(latency_ms))
+        return action_np, {
+            "inference_latency_ms": float(latency_ms),
+            "action_chunk_generated": bool(queue_len_before == 0) if queue_len_before is not None else None,
+            "action_queue_len_before": queue_len_before,
+            "action_queue_len_after": queue_len_after,
+            "n_action_steps": getattr(self.cfg, "n_action_steps", None),
+        }
 
 
 def parse_args():
@@ -103,6 +128,8 @@ def make_handler(runtime: PolicyRuntime):
                     "checkpoint": str(runtime.checkpoint),
                     "device": str(runtime.device),
                     "n_predictions": runtime.n_predictions,
+                    "mean_inference_latency_ms": float(np.mean(runtime.latency_ms)) if runtime.latency_ms else None,
+                    "p90_inference_latency_ms": float(np.percentile(runtime.latency_ms, 90)) if runtime.latency_ms else None,
                 },
             )
 
@@ -124,8 +151,8 @@ def make_handler(runtime: PolicyRuntime):
                 task = None
                 if "task" in payload.files:
                     task = str(payload["task"].item())
-                action = runtime.predict(image, state, task=task)
-                self._send_json(200, {"action": action.tolist()})
+                action, meta = runtime.predict(image, state, task=task)
+                self._send_json(200, {"action": action.tolist(), **meta})
             except Exception as exc:  # Keep errors visible to the rollout client.
                 self._send_json(500, {"error": repr(exc)})
 

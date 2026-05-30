@@ -118,10 +118,15 @@ def get_action(args, image, obs_state, task):
         "state": obs_state.astype(np.float32),
         "task": np.array(task),
     }
+    start = time.time()
     result = post_npz(args.policy_url.rstrip("/") + "/predict", payload, args.timeout_s)
+    roundtrip_ms = (time.time() - start) * 1000.0
     if "error" in result:
         raise RuntimeError("policy server error: {}".format(result["error"]))
-    return np.asarray(result["action"], dtype=np.float32)
+    action = np.asarray(result["action"], dtype=np.float32)
+    inference_ms = float(result.get("inference_latency_ms", np.nan))
+    chunk_generated = result.get("action_chunk_generated", None)
+    return action, inference_ms, float(roundtrip_ms), chunk_generated
 
 
 def clip_action(action, action_space):
@@ -157,6 +162,33 @@ def summarize(rows):
     if "final_end_point_distance" in rows[0]:
         vals = [r.get("final_end_point_distance", np.nan) for r in rows]
         summary["mean_final_end_point_distance"] = float(np.nanmean(vals))
+    for prefix in ("policy_inference_latency_ms", "policy_roundtrip_latency_ms"):
+        vals = [float(r.get(prefix + "_mean", np.nan)) for r in rows]
+        vals = [v for v in vals if np.isfinite(v)]
+        if vals:
+            summary[prefix + "_episode_mean"] = float(np.mean(np.asarray(vals, dtype=np.float32)))
+    all_infer = []
+    all_roundtrip = []
+    for row in rows:
+        all_infer.extend(row.get("_all_inference_latencies", []))
+        all_roundtrip.extend(row.get("_all_roundtrip_latencies", []))
+    all_chunk_infer = []
+    all_cached_action = []
+    all_chunk_roundtrip = []
+    all_cached_roundtrip = []
+    for row in rows:
+        all_chunk_infer.extend(row.get("_all_chunk_inference_latencies", []))
+        all_cached_action.extend(row.get("_all_cached_action_latencies", []))
+        all_chunk_roundtrip.extend(row.get("_all_chunk_roundtrip_latencies", []))
+        all_cached_roundtrip.extend(row.get("_all_cached_roundtrip_latencies", []))
+    for name, vals in (("policy_inference_latency_ms", all_infer), ("policy_roundtrip_latency_ms", all_roundtrip), ("policy_chunk_inference_latency_ms", all_chunk_infer), ("policy_cached_action_latency_ms", all_cached_action), ("policy_chunk_roundtrip_latency_ms", all_chunk_roundtrip), ("policy_cached_roundtrip_latency_ms", all_cached_roundtrip)):
+        if vals:
+            arr = np.asarray(vals, dtype=np.float32)
+            summary[name + "_mean"] = float(np.mean(arr))
+            summary[name + "_p50"] = float(np.percentile(arr, 50))
+            summary[name + "_p90"] = float(np.percentile(arr, 90))
+            summary[name + "_p95"] = float(np.percentile(arr, 95))
+            summary[name + "_max"] = float(np.max(arr))
     return summary
 
 
@@ -182,6 +214,12 @@ def main():
             num_picker = int(env_kwargs.get("num_picker", getattr(env.action_tool, "num_picker", 2)))
             frames = []
             rewards = []
+            inference_latencies = []
+            roundtrip_latencies = []
+            chunk_inference_latencies = []
+            cached_action_latencies = []
+            chunk_roundtrip_latencies = []
+            cached_roundtrip_latencies = []
             info = env._get_info()
             start_norm = float(info.get("normalized_performance", np.nan))
 
@@ -193,7 +231,16 @@ def main():
                     [extract_proprio(env, num_picker), extract_compact_state(num_picker)],
                     axis=0,
                 ).astype(np.float32)
-                action = clip_action(get_action(args, image, obs_state, task), env.action_space)
+                action_raw, inference_ms, roundtrip_ms, chunk_generated = get_action(args, image, obs_state, task)
+                inference_latencies.append(inference_ms)
+                roundtrip_latencies.append(roundtrip_ms)
+                if chunk_generated is True:
+                    chunk_inference_latencies.append(inference_ms)
+                    chunk_roundtrip_latencies.append(roundtrip_ms)
+                elif chunk_generated is False:
+                    cached_action_latencies.append(inference_ms)
+                    cached_roundtrip_latencies.append(roundtrip_ms)
+                action = clip_action(action_raw, env.action_space)
                 _, reward, done, info = env.step(action)
                 rewards.append(float(reward))
                 if done:
@@ -220,6 +267,25 @@ def main():
                 "video_path": os.path.join(video_dir, "episode_{:03d}.mp4".format(ep))
                 if args.save_every_video > 0 and ep % args.save_every_video == 0
                 else "",
+                "policy_inference_latency_ms_mean": float(np.nanmean(inference_latencies)) if inference_latencies else np.nan,
+                "policy_inference_latency_ms_p90": float(np.nanpercentile(inference_latencies, 90)) if inference_latencies else np.nan,
+                "policy_roundtrip_latency_ms_mean": float(np.nanmean(roundtrip_latencies)) if roundtrip_latencies else np.nan,
+                "policy_roundtrip_latency_ms_p90": float(np.nanpercentile(roundtrip_latencies, 90)) if roundtrip_latencies else np.nan,
+                "policy_chunk_inference_latency_ms_mean": float(np.nanmean(chunk_inference_latencies)) if chunk_inference_latencies else np.nan,
+                "policy_chunk_inference_latency_ms_p90": float(np.nanpercentile(chunk_inference_latencies, 90)) if chunk_inference_latencies else np.nan,
+                "policy_cached_action_latency_ms_mean": float(np.nanmean(cached_action_latencies)) if cached_action_latencies else np.nan,
+                "policy_cached_action_latency_ms_p90": float(np.nanpercentile(cached_action_latencies, 90)) if cached_action_latencies else np.nan,
+                "policy_chunk_roundtrip_latency_ms_mean": float(np.nanmean(chunk_roundtrip_latencies)) if chunk_roundtrip_latencies else np.nan,
+                "policy_chunk_roundtrip_latency_ms_p90": float(np.nanpercentile(chunk_roundtrip_latencies, 90)) if chunk_roundtrip_latencies else np.nan,
+                "policy_cached_roundtrip_latency_ms_mean": float(np.nanmean(cached_roundtrip_latencies)) if cached_roundtrip_latencies else np.nan,
+                "policy_cached_roundtrip_latency_ms_p90": float(np.nanpercentile(cached_roundtrip_latencies, 90)) if cached_roundtrip_latencies else np.nan,
+                "n_policy_chunk_generations": int(len(chunk_inference_latencies)),
+                "_all_inference_latencies": inference_latencies,
+                "_all_chunk_inference_latencies": chunk_inference_latencies,
+                "_all_cached_action_latencies": cached_action_latencies,
+                "_all_chunk_roundtrip_latencies": chunk_roundtrip_latencies,
+                "_all_cached_roundtrip_latencies": cached_roundtrip_latencies,
+                "_all_roundtrip_latencies": roundtrip_latencies,
             }
             if "end_point_distance" in info:
                 row["final_end_point_distance"] = float(info["end_point_distance"])
@@ -233,12 +299,18 @@ def main():
     finally:
         env.close()
 
-    keys = sorted(set().union(*[r.keys() for r in rows]))
+    csv_rows = []
+    for row in rows:
+        row = dict(row)
+        row.pop("_all_inference_latencies", None)
+        row.pop("_all_roundtrip_latencies", None)
+        csv_rows.append(row)
+    keys = sorted(set().union(*[r.keys() for r in csv_rows]))
     scores_path = os.path.join(out_dir, "scores.csv")
     with open(scores_path, "w") as fh:
         writer = csv.DictWriter(fh, fieldnames=keys)
         writer.writeheader()
-        for row in rows:
+        for row in csv_rows:
             writer.writerow(row)
 
     summary = summarize(rows)

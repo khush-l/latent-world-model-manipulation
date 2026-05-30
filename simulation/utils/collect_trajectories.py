@@ -74,6 +74,7 @@ def parse_args():
             "cloth_geometric",
             "rope_geometric_v2",
             "cloth_geometric_v2",
+            "cloth_corner_oracle",
         ),
         default="random",
         help="Behavior policy. rope_geometric and cloth_geometric are scripted demo policies.",
@@ -564,6 +565,127 @@ def cloth_geometric_v2_action(env, step_idx, args):
     return clip_action(action, action_space)
 
 
+def _cloth_corner_indices_and_targets(env, particles, target_scale=1.35):
+    config = env.get_current_config()
+    cloth_dimx, cloth_dimz = config.get("ClothSize", [0, 0])
+    cloth_dimx = int(cloth_dimx)
+    cloth_dimz = int(cloth_dimz)
+    if cloth_dimx <= 1 or cloth_dimz <= 1:
+        return None, None
+
+    corners = np.array(
+        [0, cloth_dimx - 1, (cloth_dimz - 1) * cloth_dimx, cloth_dimx * cloth_dimz - 1],
+        dtype=np.int64,
+    )
+    radius = float(getattr(env, "cloth_particle_radius", 0.00625))
+    half_x = 0.5 * cloth_dimx * radius * target_scale
+    half_z = 0.5 * cloth_dimz * radius * target_scale
+    center_xz = particles[:, [0, 2]].mean(axis=0)
+    targets_xz = np.array(
+        [
+            [center_xz[0] - half_x, center_xz[1] - half_z],
+            [center_xz[0] + half_x, center_xz[1] - half_z],
+            [center_xz[0] - half_x, center_xz[1] + half_z],
+            [center_xz[0] + half_x, center_xz[1] + half_z],
+        ],
+        dtype=np.float32,
+    )
+    return corners, targets_xz
+
+
+def _assign_corners_to_targets(corner_xz, targets_xz):
+    perms = (
+        (0, 1, 2, 3), (0, 1, 3, 2), (0, 2, 1, 3), (0, 2, 3, 1),
+        (0, 3, 1, 2), (0, 3, 2, 1), (1, 0, 2, 3), (1, 0, 3, 2),
+        (1, 2, 0, 3), (1, 2, 3, 0), (1, 3, 0, 2), (1, 3, 2, 0),
+        (2, 0, 1, 3), (2, 0, 3, 1), (2, 1, 0, 3), (2, 1, 3, 0),
+        (2, 3, 0, 1), (2, 3, 1, 0), (3, 0, 1, 2), (3, 0, 2, 1),
+        (3, 1, 0, 2), (3, 1, 2, 0), (3, 2, 0, 1), (3, 2, 1, 0),
+    )
+    best_perm = perms[0]
+    best_cost = None
+    for perm in perms:
+        assigned = targets_xz[np.asarray(perm, dtype=np.int64)]
+        cost = float(np.linalg.norm(corner_xz - assigned, axis=1).sum())
+        if best_cost is None or cost < best_cost:
+            best_cost = cost
+            best_perm = perm
+    return np.asarray(best_perm, dtype=np.int64)
+
+
+def cloth_corner_oracle_action(env, step_idx, args):
+    """Oracle corner-based ClothFlatten policy for imitation demos."""
+    if args.env_name != "ClothFlatten":
+        raise ValueError("cloth_corner_oracle policy only supports ClothFlatten")
+
+    action_space = env.action_space
+    shape_states = np.array(pyflex.get_shape_states()).reshape(-1, 14)
+    picker_pos = shape_states[:2, :3].astype(np.float32)
+    particles = np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+
+    corner_idx, targets_xz = _cloth_corner_indices_and_targets(env, particles)
+    if corner_idx is None:
+        return cloth_geometric_v2_action(env, step_idx, args)
+
+    corner_pos = particles[corner_idx]
+    corner_xz = corner_pos[:, [0, 2]]
+    assignment = _assign_corners_to_targets(corner_xz, targets_xz)
+    assigned_targets = targets_xz[assignment]
+    errors = np.linalg.norm(corner_xz - assigned_targets, axis=1)
+
+    diagonal_a = np.array([0, 3], dtype=np.int64)
+    diagonal_b = np.array([1, 2], dtype=np.int64)
+    first_pair = diagonal_a if float(errors[diagonal_a].sum()) >= float(errors[diagonal_b].sum()) else diagonal_b
+    second_pair = diagonal_b if first_pair is diagonal_a else diagonal_a
+
+    horizon = max(int(env.horizon), 1)
+    frac = float(step_idx) / float(horizon)
+    if frac < 0.43:
+        pair = first_pair
+        local_frac = frac / 0.43
+    elif frac < 0.84:
+        pair = second_pair
+        local_frac = (frac - 0.43) / 0.41
+    else:
+        pair = np.argsort(errors)[-2:]
+        local_frac = (frac - 0.84) / 0.16
+
+    target = np.zeros((2, 3), dtype=np.float32)
+    grip = np.zeros(2, dtype=np.float32)
+    lift_height = max(float(args.cloth_lift_height), 0.055)
+
+    for picker_i, corner_i in enumerate(pair):
+        pcorner = corner_pos[corner_i]
+        target_xz = assigned_targets[corner_i]
+        above = pcorner + np.array([0.0, 0.10, 0.0], dtype=np.float32)
+        grasp = np.array([pcorner[0], max(pcorner[1] + 0.006, 0.014), pcorner[2]], dtype=np.float32)
+        place_high = np.array([target_xz[0], lift_height, target_xz[1]], dtype=np.float32)
+        place_low = np.array([target_xz[0], 0.018, target_xz[1]], dtype=np.float32)
+
+        if local_frac < 0.16:
+            target[picker_i] = above
+        elif local_frac < 0.27:
+            target[picker_i] = grasp
+            grip[picker_i] = 1.0
+        elif local_frac < 0.78:
+            pull_frac = (local_frac - 0.27) / 0.51
+            pull_frac = 0.5 - 0.5 * np.cos(np.pi * pull_frac)
+            start = np.array([pcorner[0], lift_height, pcorner[2]], dtype=np.float32)
+            target[picker_i] = (1.0 - pull_frac) * start + pull_frac * place_high
+            grip[picker_i] = 1.0
+        elif local_frac < 0.91:
+            lower_frac = (local_frac - 0.78) / 0.13
+            target[picker_i] = (1.0 - lower_frac) * place_high + lower_frac * place_low
+            grip[picker_i] = 1.0
+        else:
+            target[picker_i] = place_low + np.array([0.0, 0.09, 0.0], dtype=np.float32)
+
+    target = _script_noise(target, action_space, args.script_noise_scale * 0.03)
+    delta = _macro_delta_to_action_delta(target - picker_pos, env, action_space)
+    action = np.concatenate([delta, grip.reshape(-1, 1)], axis=1).reshape(-1)
+    return clip_action(action, action_space)
+
+
 def choose_action(env, args, step_idx):
     if args.policy == "random":
         return sample_action(env.action_space)
@@ -575,6 +697,8 @@ def choose_action(env, args, step_idx):
         return cloth_geometric_action(env, step_idx, args)
     if args.policy == "cloth_geometric_v2":
         return cloth_geometric_v2_action(env, step_idx, args)
+    if args.policy == "cloth_corner_oracle":
+        return cloth_corner_oracle_action(env, step_idx, args)
     raise ValueError("unknown policy: {}".format(args.policy))
 
 
@@ -715,6 +839,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
             "cloth_geometric",
             "rope_geometric_v2",
             "cloth_geometric_v2",
+            "cloth_corner_oracle",
         ) else args.policy,
         "behavior_policy": args.policy,
         "script_noise_scale": float(args.script_noise_scale),
