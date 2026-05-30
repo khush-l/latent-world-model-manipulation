@@ -109,7 +109,6 @@ def fig_success_bar(runs_dir, k, out, thresh=0.8):
     specs = [
         ("random_k%d" % k,    "Random",          "#9e9e9e"),
         ("grad_base_k%d" % k, "MPC",             "#1e88e5"),
-        ("grad_prop_k%d" % k, "MPC + proprio",   "#43a047"),
     ]
     labels, rates, ns, colors = [], [], [], []
     for d, name, c in specs:
