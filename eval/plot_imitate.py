@@ -107,10 +107,9 @@ def fig_success_bar(runs_dir, k, out, margin=0.10):
     """Success rate by method at offset k. Success = the MPC rollout flattened
     the rope by >= `margin` normalized performance above its start state."""
     specs = [
-        ("random_k%d" % k,    "Random",            "#9e9e9e"),
-        ("cem_base_k%d" % k,  "CEM (paper)",       "#ff9800"),
-        ("grad_base_k%d" % k, "Gradient (ours)\nbaseline", "#1e88e5"),
-        ("grad_prop_k%d" % k, "Gradient (ours)\nproprio",  "#43a047"),
+        ("random_k%d" % k,    "Random",          "#9e9e9e"),
+        ("grad_base_k%d" % k, "MPC",             "#1e88e5"),
+        ("grad_prop_k%d" % k, "MPC + proprio",   "#43a047"),
     ]
     labels, rates, ns, colors = [], [], [], []
     for d, name, c in specs:
@@ -142,8 +141,8 @@ def fig_success_vs_k(runs_dir, ks, out, margin=0.10):
     """Success rate vs planning horizon k (gradient planner), with the random
     baseline as a reference line."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
-    for tmpl, name, c, mk in [("grad_base_k%d", "Gradient baseline", "#1e88e5", "o"),
-                              ("grad_prop_k%d", "Gradient proprio", "#43a047", "s")]:
+    for tmpl, name, c, mk in [("grad_base_k%d", "MPC", "#1e88e5", "o"),
+                              ("grad_prop_k%d", "MPC + proprio", "#43a047", "s")]:
         xs, ys = [], []
         for k in ks:
             eps = _load_run(Path(runs_dir) / (tmpl % k))
