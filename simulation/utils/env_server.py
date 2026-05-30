@@ -227,6 +227,27 @@ class EnvSession(object):
 
         return np.asarray(frames, dtype=np.uint8), perfs
 
+    def get_goal_image(self):
+        """Return the task's goal image as (img_size, img_size, 3) uint8.
+
+        RopeConfiguration stores a pre-rendered target-character image in its
+        current config ('goal_character_img'); resize it to the model's input
+        size. For envs without an explicit goal image this returns the current
+        frame (a benign fallback).
+        """
+        cfg = getattr(self.env, "current_config", None) or {}
+        img = cfg.get("goal_character_img") if isinstance(cfg, dict) else None
+        if img is None:
+            return self._render()
+        img = np.asarray(img)
+        if img.ndim == 3 and img.shape[:2] != (self.img_size, self.img_size):
+            # nearest-neighbour resize (no cv2/PIL dependency inside py36 env)
+            h, w = img.shape[:2]
+            yi = (np.linspace(0, h - 1, self.img_size)).astype(np.int64)
+            xi = (np.linspace(0, w - 1, self.img_size)).astype(np.int64)
+            img = img[yi][:, xi]
+        return np.ascontiguousarray(img.astype(np.uint8))
+
     def step(self, action):
         action = np.asarray(action, dtype=np.float32)
         if action.shape != (self.action_dim,):
@@ -289,6 +310,8 @@ def main():
                     seed=req.get("seed"),
                 )
                 resp = {"ok": True, "frames": _encode_ndarray(frames), "perfs": perfs}
+            elif cmd == "get_goal_image":
+                resp = {"ok": True, "goal_image": _encode_ndarray(session.get_goal_image())}
             elif cmd == "close":
                 resp = {"ok": True}
                 _send(resp)

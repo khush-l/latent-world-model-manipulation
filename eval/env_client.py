@@ -149,6 +149,12 @@ class SubprocessSoftgym:
         resp = self._call(req)
         return _decode_ndarray(resp["frames"]), resp["perfs"]
 
+    def get_goal_image(self):
+        """Task goal image as (img_size, img_size, 3) uint8 (e.g. RopeConfiguration
+        target character). Falls back to the current frame if the env has none."""
+        resp = self._call({"cmd": "get_goal_image"})
+        return _decode_ndarray(resp["goal_image"])
+
     def step(self, action: np.ndarray):
         resp = self._call({"cmd": "step", "action": _encode_ndarray(action.astype(np.float32))})
         return {
