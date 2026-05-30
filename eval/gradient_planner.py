@@ -68,6 +68,8 @@ class GradientPlanner:
         action_high: torch.Tensor,  # (A,)
         history_size: int,
         device: str = "cuda",
+        proprio_mean: Optional[torch.Tensor] = None,  # (P,) z-score stats; proprio
+        proprio_std: Optional[torch.Tensor] = None,   # is fed in-distribution (as trained)
     ):
         self.model = model
         self.cfg = config
@@ -78,6 +80,9 @@ class GradientPlanner:
         self.action_dim = action_low.numel()
         self._half_range = 0.5 * (self.action_high - self.action_low)
         self._mid = 0.5 * (self.action_high + self.action_low)
+        self.uses_proprio = getattr(model, "proprio_encoder", None) is not None
+        self.proprio_mean = proprio_mean.to(device) if proprio_mean is not None else None
+        self.proprio_std = proprio_std.to(device) if proprio_std is not None else None
         self.prev_raw: Optional[torch.Tensor] = None  # (P, A) unconstrained warm start
 
         # Freeze the world model — we only differentiate w.r.t. actions.
@@ -94,21 +99,58 @@ class GradientPlanner:
         """Map an unconstrained tensor → action box via tanh. (..., A) → (..., A)."""
         return self._mid + self._half_range * torch.tanh(raw)
 
+    def _norm_proprio(self, p):
+        if self.proprio_mean is None:
+            return p
+        return (p - self.proprio_mean) / self.proprio_std
+
+    def _integrate_proprio(self, start_proprio, future_actions):
+        """Faithfully derive future picker state from PLANNED actions only — no
+        sim peeking. Picker is directly controllable: picker_xyz += action delta;
+        grip := action grip. Differentiable w.r.t. actions (cumulative sums).
+
+        proprio layout (8): [p0_xyz(3), p1_xyz(3), hold0, hold1]
+        action layout (8):  [d0_xyz(3), grip0, d1_xyz(3), grip1]
+
+        Args:
+            start_proprio: (B, 8) current RAW proprio (picker positions + grip).
+            future_actions:(B, P, 8) RAW planned actions.
+        Returns:
+            (B, P, 8) RAW future proprio.
+        """
+        p0 = start_proprio[:, 0:3].unsqueeze(1)   # (B,1,3)
+        p1 = start_proprio[:, 3:6].unsqueeze(1)
+        d0 = future_actions[:, :, 0:3]            # (B,P,3)
+        d1 = future_actions[:, :, 4:7]
+        pos0 = p0 + torch.cumsum(d0, dim=1)       # (B,P,3) controllable picker path
+        pos1 = p1 + torch.cumsum(d1, dim=1)
+        g0 = future_actions[:, :, 3:4]            # grip command (B,P,1)
+        g1 = future_actions[:, :, 7:8]
+        return torch.cat([pos0, pos1, g0, g1], dim=-1)  # (B,P,8)
+
     # ---- differentiable rollout cost ----
 
-    def _rollout_cost(self, z_hist, hist_act_emb, future_actions, goal_emb):
+    def _rollout_cost(self, z_hist, hist_act_emb, future_actions, goal_emb,
+                      start_proprio=None):
         """Differentiable terminal latent cost.
 
         Args:
             z_hist:        (B, H, D) encoded history latents (detached, fixed)
-            hist_act_emb:  (B, H, D) history action embeddings (detached, fixed)
+            hist_act_emb:  (B, H, D) history conditioning embeddings (detached)
             future_actions:(B, P, A) candidate future actions (carry grad)
             goal_emb:      (B, D) goal latent (detached)
+            start_proprio: (B, P_dim) current RAW proprio, for proprio models.
         Returns:
             cost: (B,) terminal latent L2² distance to goal (+ optional action reg)
         """
         H = self.history_size
         fut_act_emb = self.model.action_encoder(future_actions)  # (B, P, D)
+        # Fuse proprio conditioning (matching model.encode: cond = act + proprio),
+        # with future picker state integrated faithfully from the planned actions.
+        if self.uses_proprio and start_proprio is not None:
+            fut_proprio = self._integrate_proprio(start_proprio, future_actions)  # (B,P,8) raw
+            fut_proprio_emb = self.model.proprio_encoder(self._norm_proprio(fut_proprio))
+            fut_act_emb = fut_act_emb + fut_proprio_emb
 
         emb = z_hist
         act_emb = hist_act_emb
@@ -127,13 +169,15 @@ class GradientPlanner:
 
     # ---- main entry ----
 
-    def plan(self, pixels_history, goal_emb, history_actions):
+    def plan(self, pixels_history, goal_emb, history_actions, history_proprio=None):
         """Optimize an action sequence and return the first action.
 
         Args:
             pixels_history: (H, C, H_img, W_img) recent frames, ImageNet-normalized.
             goal_emb:       (D,) target latent.
             history_actions:(H, A) actions taken over the history window.
+            history_proprio:(H, P_dim) RAW proprio over the history window
+                            (required for proprio-fused models).
         Returns:
             first_action: (A,) the first action of the best plan (grip un-thresholded;
                           caller thresholds the grip dims at execution).
@@ -145,16 +189,23 @@ class GradientPlanner:
         A = self.action_dim
         device = self.device
 
-        # Encode history once (no grad — fixed context).
+        # Encode history once (no grad — fixed context). For proprio models the
+        # history conditioning fuses real proprio: cond = act_emb + proprio_emb.
         with torch.no_grad():
             init = self.model.encode({"pixels": pixels_history.unsqueeze(0)})  # (1, H, D)
             z_hist = init["emb"]
             hist_act_emb = self.model.action_encoder(history_actions.unsqueeze(0))  # (1, H, D)
+            start_proprio = None
+            if self.uses_proprio and history_proprio is not None:
+                hist_act_emb = hist_act_emb + self.model.proprio_encoder(
+                    self._norm_proprio(history_proprio.unsqueeze(0)))
+                start_proprio = history_proprio[-1:].clone()  # (1, P_dim) current picker state
 
         # Expand fixed context to R restarts.
         z_hist_b = z_hist.expand(R, -1, -1).contiguous()
         hist_act_emb_b = hist_act_emb.expand(R, -1, -1).contiguous()
         goal_b = goal_emb.unsqueeze(0).expand(R, -1).contiguous()
+        start_proprio_b = start_proprio.expand(R, -1).contiguous() if start_proprio is not None else None
 
         # Initialize unconstrained action params. Restart 0 = warm-start (if any),
         # restarts 1..R-1 = warm-start + noise (or pure noise if no warm start).
@@ -170,14 +221,16 @@ class GradientPlanner:
         for _ in range(cfg.n_iters):
             opt.zero_grad(set_to_none=True)
             actions = self._squash(raw)                       # (R, P, A)
-            cost = self._rollout_cost(z_hist_b, hist_act_emb_b, actions, goal_b)
+            cost = self._rollout_cost(z_hist_b, hist_act_emb_b, actions, goal_b,
+                                      start_proprio=start_proprio_b)
             cost.sum().backward()
             opt.step()
 
         # Pick the best restart by terminal cost.
         with torch.no_grad():
             actions = self._squash(raw)
-            final_cost = self._rollout_cost(z_hist_b, hist_act_emb_b, actions, goal_b)
+            final_cost = self._rollout_cost(z_hist_b, hist_act_emb_b, actions, goal_b,
+                                            start_proprio=start_proprio_b)
             best = int(torch.argmin(final_cost).item())
             best_actions = actions[best]                      # (P, A)
             self.prev_raw = raw[best].detach().clone()

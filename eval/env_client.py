@@ -58,6 +58,7 @@ class SubprocessSoftgym:
         num_picker: int = 2,
         headless: bool = True,
         render: bool = True,
+        env_seed: int = 0,
         docker_script: str = "simulation/docker/softgym-local.sh",
     ):
         self.env_name = env_name
@@ -66,6 +67,7 @@ class SubprocessSoftgym:
         self.num_picker = num_picker
         self.headless = headless
         self.render = render
+        self.env_seed = env_seed
         self.docker_script = str(PROJECT_ROOT / docker_script)
         self._proc: Optional[subprocess.Popen] = None
         self._action_dim: Optional[int] = None
@@ -99,6 +101,7 @@ class SubprocessSoftgym:
             "num_picker": self.num_picker,
             "headless": self.headless,
             "render": self.render,
+            "env_seed": self.env_seed,
         })
         self._action_dim = int(resp["action_dim"])
 
@@ -130,16 +133,20 @@ class SubprocessSoftgym:
             "info":    resp.get("info", {}),
         }
 
-    def make_goal_trajectory(self, n_steps: int = 75, noise_scale: float = 0.02):
+    def make_goal_trajectory(self, n_steps: int = 75, noise_scale: float = 0.02, seed=None):
         """Generate an expert reference trajectory on the current rope (the env
-        is restored to its pre-call state afterward).
+        is restored to its pre-call state afterward). Pass `seed` for a
+        reproducible reference (identical subgoals across runs).
 
         Returns (frames, perfs):
             frames: (n_steps+1, H, W, 3) uint8
             perfs:  list[float] normalized_performance per step
         """
-        resp = self._call({"cmd": "make_goal_trajectory",
-                           "n_steps": int(n_steps), "noise_scale": float(noise_scale)})
+        req = {"cmd": "make_goal_trajectory", "n_steps": int(n_steps),
+               "noise_scale": float(noise_scale)}
+        if seed is not None:
+            req["seed"] = int(seed)
+        resp = self._call(req)
         return _decode_ndarray(resp["frames"]), resp["perfs"]
 
     def step(self, action: np.ndarray):

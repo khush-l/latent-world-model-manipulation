@@ -107,7 +107,7 @@ class EnvSession(object):
     def __init__(self, env_name="RopeFlatten", num_variations=200, img_size=128,
                  num_picker=2, headless=True, render=True,
                  observation_mode=None, action_mode=None, render_mode=None,
-                 use_cached_states=False):
+                 use_cached_states=False, env_seed=0):
         env_class = SOFTGYM_ENVS[env_name]
         kwargs = copy.deepcopy(env_arg_dict[env_name])
         kwargs["headless"] = headless
@@ -124,6 +124,14 @@ class EnvSession(object):
         if render_mode is not None:
             kwargs["render_mode"] = render_mode
 
+        # Seed the GLOBAL np.random BEFORE constructing the env: RopeFlatten's
+        # generate_env_variation() draws rope segment count + random_pick_and_place
+        # from global np.random with no internal seeding, so without this the 200
+        # cached variations differ between processes and config_id maps to a
+        # DIFFERENT rope in each run — silently confounding any cross-run A/B.
+        # Fixing the seed makes config_id -> rope reproducible everywhere.
+        if env_seed is not None:
+            np.random.seed(int(env_seed))
         self.env = env_class(**kwargs)
         self.env_name = env_name
         self.img_size = int(img_size)
@@ -159,14 +167,19 @@ class EnvSession(object):
                    if getattr(self.env, "cached_init_states", None) else None
             self.env.reset(config=cfg, config_id=int(config_id), initial_state=init)
         state, proprio = self._state()
+        # True normalized performance of the reset rope (before any action).
+        try:
+            info = _encode_info(self.env._get_info())
+        except Exception:
+            info = {}
         return {
             "pixels": _encode_ndarray(self._render()),
             "state": _encode_ndarray(state),
             "proprio": _encode_ndarray(proprio),
-            "info": {},
+            "info": info,
         }
 
-    def make_goal_trajectory(self, n_steps, noise_scale=0.02):
+    def make_goal_trajectory(self, n_steps, noise_scale=0.02, seed=None):
         """Generate an expert reference trajectory ON THE CURRENT ROPE, then
         restore the env to its current state.
 
@@ -183,8 +196,16 @@ class EnvSession(object):
         from geometric_policy import make_policy  # type: ignore
 
         snapshot = self.env.get_state()
+        # CRITICAL: get_state/set_state restore particle positions but NOT the
+        # env's internal step counter. The expert rollout below advances
+        # self.env.time_step by n_steps; for RopeFlatten (horizon=75) running a
+        # 75-step expert leaves time_step at the horizon, so the caller's real
+        # MPC rollout would hit done=True after a SINGLE step. Snapshot and
+        # restore time_step explicitly so the env is truly untouched.
+        time_step_snapshot = getattr(self.env, "time_step", None)
+        rng = np.random.RandomState(int(seed)) if seed is not None else None
         policy = make_policy(self.env_name, self.env, self.num_picker, kind="geometric",
-                             noise_scale=noise_scale)
+                             noise_scale=noise_scale, rng=rng)
         policy.reset()
 
         frames = [self._render()]
@@ -198,8 +219,11 @@ class EnvSession(object):
             if done:
                 break
 
-        # Restore the env to exactly where it was before the expert rollout.
+        # Restore the env to exactly where it was before the expert rollout,
+        # including the internal step counter (set_state does not touch it).
         self.env.set_state(snapshot)
+        if time_step_snapshot is not None:
+            self.env.time_step = time_step_snapshot
 
         return np.asarray(frames, dtype=np.uint8), perfs
 
@@ -262,6 +286,7 @@ def main():
                 frames, perfs = session.make_goal_trajectory(
                     n_steps=int(req.get("n_steps", 75)),
                     noise_scale=float(req.get("noise_scale", 0.02)),
+                    seed=req.get("seed"),
                 )
                 resp = {"ok": True, "frames": _encode_ndarray(frames), "perfs": perfs}
             elif cmd == "close":

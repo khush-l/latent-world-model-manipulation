@@ -66,6 +66,29 @@ class RandomPlanner:
         return self.low + u * (self.high - self.low)
 
 
+def _load_proprio_stats(h5_path, device):
+    """Per-column proprio (mean, std) from the TRAINING data — the same z-score
+    the model was trained under. Proprio-fused models must receive proprio in
+    this normalized frame (actions are kept raw, per our A/B finding).
+
+    Returns (mean, std) float32 tensors of shape (P,), or (None, None) on miss.
+    """
+    if not h5_path or not Path(h5_path).exists():
+        print(f"  [proprio] WARNING: stats h5 not found at {h5_path}; "
+              f"feeding RAW proprio (off training distribution).")
+        return None, None
+    import h5py
+    with h5py.File(h5_path, "r") as f:
+        proprio = f["proprio"][:].astype(np.float32)
+    finite = np.isfinite(proprio).all(axis=1)
+    valid = proprio[finite]
+    mean = valid.mean(axis=0).astype(np.float32)
+    std = valid.std(axis=0).astype(np.float32)
+    std[std < 1e-6] = 1.0
+    print(f"  [proprio] loaded z-score stats from {h5_path} (dim={mean.shape[0]})")
+    return (torch.from_numpy(mean).to(device), torch.from_numpy(std).to(device))
+
+
 def _build_planner(args, model, action_low, action_high, device):
     """Construct the planner selected by --planner."""
     if args.planner == "random":
@@ -79,6 +102,10 @@ def _build_planner(args, model, action_low, action_high, device):
             history_size=args.history_size, device=str(device),
         )
     elif args.planner == "gradient":
+        proprio_mean = proprio_std = None
+        if getattr(model, "proprio_encoder", None) is not None:
+            proprio_mean, proprio_std = _load_proprio_stats(
+                getattr(args, "_proprio_stats_h5", None), device)
         return GradientPlanner(
             model=model,
             config=GradientPlanConfig(plan_horizon=args.plan_horizon,
@@ -87,6 +114,7 @@ def _build_planner(args, model, action_low, action_high, device):
                                       action_reg=args.grad_action_reg),
             action_low=action_low, action_high=action_high,
             history_size=args.history_size, device=str(device),
+            proprio_mean=proprio_mean, proprio_std=proprio_std,
         )
     raise ValueError("unknown planner: %r" % args.planner)
 
@@ -447,9 +475,16 @@ def mode_imitate(args, model, device):
         for i in range(args.n_episodes):
             cfg_id = (args.seed + i) % args.num_variations
             obs = env.reset(config_id=cfg_id, seed=args.seed + i)
+            # TRUE start performance of the reset rope (before any action),
+            # so improvement = final - start is consistent across runs.
+            start_perf = float(obs["info"].get("normalized_performance",
+                                               obs["info"].get("performance", 0.0)))
 
             # Expert reference on THIS rope (env restored afterward).
-            ref_frames, ref_perfs = env.make_goal_trajectory(n_steps=args.eval_budget)
+            # Seed the reference per config → identical subgoals across runs,
+            # so model/planner comparisons are not confounded by reference noise.
+            ref_frames, ref_perfs = env.make_goal_trajectory(
+                n_steps=args.eval_budget, seed=1000 + cfg_id)
             expert_final = float(ref_perfs[-1]) if ref_perfs else 0.0
             expert_max = float(max(ref_perfs)) if ref_perfs else 0.0
             T_ref = len(ref_frames)
@@ -459,6 +494,12 @@ def mode_imitate(args, model, device):
             pixel_hist = collections.deque([init_px] * args.history_size, maxlen=args.history_size)
             action_hist = collections.deque([torch.zeros(A, device=device)] * args.history_size,
                                             maxlen=args.history_size)
+            # Proprio history (raw picker xyz + grip). Only consumed by a
+            # proprio-fused gradient planner; harmless to track otherwise.
+            uses_proprio = getattr(planner, "uses_proprio", False)
+            init_proprio = torch.from_numpy(np.asarray(obs["proprio"], np.float32)).to(device)
+            proprio_hist = collections.deque([init_proprio] * args.history_size,
+                                             maxlen=args.history_size)
             planner.reset()
 
             rollout_frames = [obs["pixels"]]
@@ -471,7 +512,11 @@ def mode_imitate(args, model, device):
                 act = torch.stack(list(action_hist), dim=0)
 
                 t0 = time.perf_counter()
-                first_action = planner.plan(px, goal_emb, act)
+                if uses_proprio:
+                    prop = torch.stack(list(proprio_hist), dim=0)
+                    first_action = planner.plan(px, goal_emb, act, history_proprio=prop)
+                else:
+                    first_action = planner.plan(px, goal_emb, act)
                 if str(device) == "cuda":
                     torch.cuda.synchronize()
                 lat.append(time.perf_counter() - t0)
@@ -483,6 +528,8 @@ def mode_imitate(args, model, device):
                 rollout_frames.append(step_out["pixels"])
                 pixel_hist.append(torch.from_numpy(_to_imagenet_float(step_out["pixels"])).float().to(device))
                 action_hist.append(first_action.detach())
+                proprio_hist.append(
+                    torch.from_numpy(np.asarray(step_out["proprio"], np.float32)).to(device))
                 if step_out["done"]:
                     break
 
@@ -505,8 +552,10 @@ def mode_imitate(args, model, device):
             summary.append({"episode": i, "config_id": cfg_id, "goal_offset": k,
                             "mpc_final": mpc_final, "mpc_max": mpc_max,
                             "expert_final": expert_final, "expert_max": expert_max,
-                            "start_perf": float(ref_perfs[0]) if ref_perfs else 0.0,
-                            "mean_plan_lat_s": float(np.mean(lat))})
+                            "start_perf": start_perf,  # true reset-state perf
+                            "mean_plan_lat_s": float(np.mean(lat)),
+                            "mpc_perf_curve": [float(p) for p in perfs],
+                            "expert_perf_curve": [float(p) for p in ref_perfs]})
     finally:
         env.close()
 
@@ -587,12 +636,33 @@ def parse_args():
     p.add_argument("--predictor-dim-head", type=int, default=64)
     p.add_argument("--predictor-dropout", type=float, default=0.1)
     p.add_argument("--action-dim", type=int, default=8)
+    p.add_argument("--use-proprio", action="store_true",
+                   help="Force proprio-fused arch (normally auto-detected from "
+                        "the checkpoint's sibling config.json).")
+    p.add_argument("--proprio-stats-h5", default=None,
+                   help="HDF5 to compute proprio z-score stats from. Defaults to "
+                        "the training data path recorded in config.json.")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Read the training config next to the checkpoint (if present) so we
+    # rebuild the EXACT arch (proprio fusion on/off) and know which dataset's
+    # z-score stats to normalize proprio with — no manual flag mismatch.
+    train_cfg = {}
+    cfg_path = Path(args.ckpt).parent / "config.json"
+    if cfg_path.exists():
+        train_cfg = json.loads(cfg_path.read_text())
+    use_proprio = bool(train_cfg.get("use_proprio", args.use_proprio))
+    # Proprio z-score source: explicit flag > training data path > eval h5.
+    args._proprio_stats_h5 = (args.proprio_stats_h5
+                              or train_cfg.get("data")
+                              or args.eval_h5)
+    if use_proprio:
+        print(f"  [proprio] model is proprio-fused; stats from {args._proprio_stats_h5}")
 
     # Rebuild the model with the same arch as training, then load weights.
     model = build_lewm(
@@ -602,7 +672,7 @@ def main():
         predictor_dim_head=args.predictor_dim_head,
         predictor_dropout=args.predictor_dropout,
         history_size=args.history_size, num_preds=args.num_preds,
-        action_dim=args.action_dim,
+        action_dim=args.action_dim, use_proprio=use_proprio,
     ).to(device)
     state = torch.load(args.ckpt, map_location=device)
     if isinstance(state, dict) and "model_state_dict" in state:

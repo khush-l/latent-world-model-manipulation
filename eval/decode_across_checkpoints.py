@@ -51,6 +51,10 @@ def parse_args():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default=None)
     p.add_argument("--out", default=None)
+    p.add_argument("--final-only", action="store_true",
+                   help="Only train/visualize the last checkpoint, normally ckpt_final.pt.")
+    p.add_argument("--save-decoders-dir", default=None,
+                   help="If set, save each trained decoder as decoder_stepXXXXXX.pt in this directory.")
     p.add_argument("--n-checkpoints", type=int, default=0,
                    help="If >0, evenly subsample to this many checkpoints "
                         "(always including the first and last).")
@@ -86,6 +90,9 @@ def find_checkpoints(run_dir):
 def build_model(ckpt_path, cfg_fallback, device, img_size, patch_size):
     state = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = state.get("config", cfg_fallback)
+    state_dict = state["model_state_dict"]
+    if any(k.startswith("_orig_mod.") for k in state_dict):
+        state_dict = {k.removeprefix("_orig_mod."): v for k, v in state_dict.items()}
     model = build_lewm(
         img_size=img_size, patch_size=patch_size,
         embed_dim=cfg.get("embed_dim", 192),
@@ -94,9 +101,11 @@ def build_model(ckpt_path, cfg_fallback, device, img_size, patch_size):
         predictor_dim_head=cfg.get("predictor_dim_head", 64),
         predictor_dropout=cfg.get("predictor_dropout", 0.1),
         history_size=cfg.get("history_size", 3), num_preds=cfg.get("num_preds", 1),
-        action_dim=8,
+        action_dim=cfg.get("frameskip", 1) * 8,
+        proprio_dim=8,
+        use_proprio=bool(cfg.get("use_proprio", False)),
     ).to(device)
-    model.load_state_dict(state["model_state_dict"])
+    model.load_state_dict(state_dict)
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
@@ -133,7 +142,7 @@ def train_decoder_for(model, loader, fixed_frames, args, device, latent_dim):
     dec.eval()
     with torch.no_grad():
         rec = dec(encode(fixed_frames))
-    return rec, float(loss.item())
+    return rec, float(loss.item()), dec
 
 
 def main():
@@ -145,7 +154,10 @@ def main():
     ckpts = find_checkpoints(args.run_dir)
     if not ckpts:
         raise SystemExit(f"no checkpoints in {args.run_dir}")
-    ckpts = subsample(ckpts, args.n_checkpoints)
+    if args.final_only:
+        ckpts = [ckpts[-1]]
+    else:
+        ckpts = subsample(ckpts, args.n_checkpoints)
     print(f"using {len(ckpts)} checkpoints: {[s for s,_ in ckpts]}")
 
     # Dataset + loader built ONCE (independent of the model).
@@ -172,17 +184,40 @@ def main():
         model, cfg = build_model(path, cfg_fallback, device, args.img_size, args.patch_size)
         cfg_fallback = cfg
         latent_dim = cfg.get("embed_dim", 192)
-        rec, mse = train_decoder_for(model, loader, fixed, args, device, latent_dim)
+        rec, mse, decoder = train_decoder_for(model, loader, fixed, args, device, latent_dim)
         rows.append((f"step {step}", denorm(rec)))
+        if args.save_decoders_dir:
+            save_dir = Path(args.save_decoders_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            decoder_path = save_dir / f"decoder_step{step:06d}.pt"
+            decoder_state = {k: v.detach().cpu() for k, v in decoder.state_dict().items()}
+            torch.save({
+                "decoder_state_dict": decoder_state,
+                "decoder_type": args.decoder_type,
+                "decode_from": "emb",
+                "latent_dim": latent_dim,
+                "img_size": args.img_size,
+                "patch_size": args.patch_size,
+                "checkpoint": str(path),
+                "step": step,
+                "config": cfg,
+                "recon_mse": mse,
+            }, decoder_path)
+            print(f"   saved decoder {decoder_path}", flush=True)
         print(f"   done (final recon MSE {mse:.4f})", flush=True)
-        del model
+        del model, decoder
         torch.cuda.empty_cache()
 
     # Assemble grid with matplotlib: rows = checkpoints, cols = frames.
     nrow, ncol = len(rows), args.n_frames
     fig, axes = plt.subplots(nrow, ncol, figsize=(1.4 * ncol, 1.4 * nrow))
-    if nrow == 1:
+    axes = np.asarray(axes)
+    if nrow == 1 and ncol == 1:
+        axes = axes.reshape(1, 1)
+    elif nrow == 1:
         axes = axes[None, :]
+    elif ncol == 1:
+        axes = axes[:, None]
     for r, (label, imgs) in enumerate(rows):
         for c in range(ncol):
             ax = axes[r, c]
