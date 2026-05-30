@@ -172,6 +172,11 @@ class EnvSession(object):
             info = _encode_info(self.env._get_info())
         except Exception:
             info = {}
+        # Surface the task goal label when present (e.g. RopeConfiguration's
+        # target character), so callers can name/label episodes.
+        cur = getattr(self.env, "current_config", None)
+        if isinstance(cur, dict) and "goal_character" in cur:
+            info["goal_character"] = str(cur["goal_character"])
         return {
             "pixels": _encode_ndarray(self._render()),
             "state": _encode_ndarray(state),
