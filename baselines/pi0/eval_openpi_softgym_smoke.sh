@@ -9,11 +9,12 @@ PORT=${OPENPI_POLICY_PORT:-8766}
 HOST_FOR_CONTAINER=${OPENPI_POLICY_HOST_FOR_CONTAINER:-172.17.0.1}
 OUT=${OPENPI_EVAL_OUT:-data/evals/pi0_rope_smoke}
 LOG=${OPENPI_SERVER_LOG:-"$REPO_ROOT/baselines/logs/pi0_softgym_server.log"}
+UV_BIN=${UV:-${HOME}/.local/share/uv-bootstrap/bin/uv}
 
 mkdir -p "$(dirname "$LOG")"
 
 cd "$OPENPI_ROOT"
-uv run python "$REPO_ROOT/baselines/pi0/openpi_softgym_server.py" \
+"$UV_BIN" run python "$REPO_ROOT/baselines/pi0/openpi_softgym_server.py" \
   --config-name "$OPENPI_CONFIG" \
   --checkpoint "$OPENPI_CHECKPOINT" \
   --host 0.0.0.0 \

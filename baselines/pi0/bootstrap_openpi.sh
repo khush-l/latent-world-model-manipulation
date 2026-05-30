@@ -4,8 +4,10 @@ set -euo pipefail
 OPENPI_ROOT=${1:-/home/ubuntu/openpi}
 
 if ! command -v uv >/dev/null 2>&1; then
-  python3 -m pip install --user uv
-  export PATH="$HOME/.local/bin:$PATH"
+  UV_BOOTSTRAP="$HOME/.local/share/uv-bootstrap"
+  python3 -m venv "$UV_BOOTSTRAP"
+  "$UV_BOOTSTRAP/bin/pip" install --upgrade pip uv
+  export PATH="$UV_BOOTSTRAP/bin:$PATH"
 fi
 
 if [[ ! -d "$OPENPI_ROOT/.git" ]]; then
