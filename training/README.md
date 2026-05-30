@@ -40,6 +40,47 @@ python training/train.py \
   --run-name clothflatten_full
 ```
 
+## Ablation sweep
+
+`run_ablations.sh` runs 16 **hyperparameter** configurations sequentially on one
+GPU, ALL on the full mixed dataset, **~8 epochs each** (per-run step counts are
+auto-computed from batch size and window length). Each logs to W&B under the
+shared tag `ablation_sweep_v1`. Runs are priority-ordered (most informative
+first) so an interrupted sweep still yields the important ablations.
+
+| # | Run | Hyperparameter tested |
+|---|---|---|
+| 1 | baseline | reference config |
+| 2 | no_sigreg | collapse without SIGReg |
+| 3 | sigreg_low (λ=0.01) | weak regularization |
+| 4 | sigreg_high (λ=0.5) | over-regularization (paper Fig 16) |
+| 5 | dropout_off (p=0.0) | no predictor dropout (paper Tab 9) |
+| 6 | predictor_tiny (dim_head=12) | ViT-T predictor (paper Tab 6: −15 SR) |
+| 7 | predictor_shallow (depth=3) | half-depth predictor |
+| 8 | lr_high (2e-4) | 4× learning rate |
+| 9 | lr_low (1e-5) | 0.2× learning rate |
+| 10 | lr_cosine | cosine schedule + 2k warmup |
+| 11 | weight_decay_off (0.0) | no weight decay |
+| 12 | weight_decay_high (1e-2) | 10× weight decay |
+| 13 | history_5 | longer prediction context |
+| 14 | num_preds_2 | predict 2 steps ahead |
+| 15 | batch_256 | larger batch |
+| 16 | batch_64 | smaller batch (2× steps — runs last) |
+
+```bash
+export WANDB_API_KEY=<key>        # or `wandb login`
+bash training/run_ablations.sh    # ~8 epochs/run; ~8 h total on H100 @ ~34 steps/s
+
+# Override knobs via env vars:
+EPOCHS=6 bash training/run_ablations.sh        # fewer epochs (faster, ~6.5 h)
+START_AT=9 bash training/run_ablations.sh      # resume from run #9
+```
+
+Robust to single-run failure (no `set -e`); per-run logs in
+`training/runs/abl_*/train.log`, summary in
+`training/runs/ablation_sweep_v1.summary`. All curves overlay in W&B by
+filtering the `ablation_sweep_v1` tag.
+
 ## Charts
 
 `train.py` writes per-step metrics to `training/runs/<run_name>/metrics.jsonl`.
@@ -51,7 +92,6 @@ python training/plot_metrics.py training/runs/<run_name>/metrics.jsonl
 ```
 
 Useful flags:
-- `--smooth N` — moving-average smoothing window
 - `--log-y` — log-scale the loss panels
 - `--output path.png` — custom output location
 

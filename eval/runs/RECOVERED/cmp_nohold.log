@@ -1,0 +1,453 @@
+================ BASELINE nohold ================
+/home/nparasar/Documents/projects/cs231n-project/eval/run_mpc.py:707: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  state = torch.load(args.ckpt, map_location=device)
+[env_server] ready, awaiting commands on stdin (line-delimited JSON)
+Compute Device: NVIDIA L4
+
+Pyflex init done!
+config 0: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 1: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 2: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 3: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 4: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 5: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 6: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 7: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 8: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 9: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 10: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 11: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 12: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 13: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 14: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 15: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 16: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 17: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 18: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 19: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 20: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 21: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 22: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 23: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 24: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 25: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 26: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 27: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 28: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 29: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 30: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 31: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 32: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 33: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 34: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 35: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 36: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 37: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 38: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 39: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 40: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 41: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 42: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 43: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 44: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 45: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 46: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 47: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 48: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 49: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 50: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 51: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 52: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 53: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 54: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 55: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 56: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 57: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 58: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 59: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 60: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 61: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 62: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 63: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 64: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 65: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 66: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 67: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 68: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 69: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 70: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 71: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 72: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 73: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 74: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 75: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 76: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 77: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 78: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 79: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 80: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 81: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 82: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 83: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 84: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 85: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 86: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 87: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 88: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 89: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 90: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 91: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 92: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 93: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 94: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 95: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 96: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 97: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 98: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 99: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 100: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 101: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 102: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 103: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 104: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 105: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 106: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 107: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 108: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 109: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 110: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 111: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 112: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 113: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 114: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 115: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 116: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 117: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 118: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 119: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 120: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 121: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 122: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 123: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 124: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 125: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 126: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 127: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 128: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 129: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 130: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 131: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 132: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 133: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 134: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 135: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 136: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 137: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 138: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 139: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 140: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 141: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 142: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 143: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 144: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 145: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 146: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 147: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 148: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 149: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 150: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 151: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 152: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 153: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 154: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 155: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 156: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 157: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 158: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 159: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 160: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 161: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 162: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 163: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 164: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 165: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 166: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 167: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 168: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 169: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 170: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 171: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 172: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 173: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 174: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 175: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 176: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 177: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 178: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 179: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 180: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 181: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 182: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 183: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 184: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 185: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 186: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 187: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 188: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 189: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 190: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 191: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 192: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 193: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 194: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 195: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 196: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 197: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 198: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 199: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+loaded model: 18.02M params from training/runs/rope_full_mixed_v1/ckpt_final.pt
+  [1/8] cfg=0  MPC final=0.705 max=0.791  |  expert final=0.995 max=0.999  |  lat=569ms
+  [2/8] cfg=1  MPC final=0.222 max=0.445  |  expert final=0.959 max=0.976  |  lat=572ms
+  [3/8] cfg=2  MPC final=0.979 max=0.979  |  expert final=0.971 max=0.990  |  lat=570ms
+  [4/8] cfg=3  MPC final=0.456 max=0.456  |  expert final=0.941 max=0.956  |  lat=566ms
+  [5/8] cfg=4  MPC final=0.440 max=0.440  |  expert final=0.822 max=0.971  |  lat=563ms
+  [6/8] cfg=5  MPC final=0.966 max=0.996  |  expert final=0.930 max=0.976  |  lat=562ms
+  [7/8] cfg=6  MPC final=0.530 max=0.533  |  expert final=0.911 max=0.951  |  lat=562ms
+  [8/8] cfg=7  MPC final=0.515 max=0.567  |  expert final=0.868 max=0.991  |  lat=564ms
+
+========== IMITATE SUMMARY (goal_offset=5) ==========
+episodes:        8
+start perf:      mean=0.521
+MPC final perf:  mean=0.602  median=0.522
+expert final:    mean=0.925  (upper bound)
+MPC improvement over start: +0.081
+MPC / expert ratio:         65.1%
+wrote eval/runs/cmp_baseline_nohold/summary_k5.json  (+ gifs in eval/runs/cmp_baseline_nohold/gifs)
+================ PROPRIO nohold ================
+/home/nparasar/Documents/projects/cs231n-project/eval/run_mpc.py:677: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  state = torch.load(args.ckpt, map_location=device)
+[env_server] ready, awaiting commands on stdin (line-delimited JSON)
+Compute Device: NVIDIA L4
+
+Pyflex init done!
+config 0: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 1: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 2: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 3: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 4: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 5: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 6: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 7: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 8: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 9: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 10: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 11: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 12: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 13: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 14: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 15: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 16: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 17: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 18: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 19: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 20: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 21: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 22: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 23: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 24: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 25: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 26: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 27: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 28: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 29: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 30: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 31: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 32: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 33: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 34: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 35: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 36: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 37: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 38: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 39: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 40: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 41: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 42: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 43: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 44: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 45: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 46: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 47: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 48: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 49: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 50: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 51: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 52: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 53: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 54: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 55: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 56: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 57: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 58: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 59: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 60: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 61: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 62: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 63: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 64: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 65: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 66: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 67: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 68: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 69: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 70: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 71: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 72: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 73: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 74: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 75: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 76: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 77: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 78: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 79: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 80: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 81: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 82: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 83: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 84: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 85: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 86: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 87: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 88: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 89: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 90: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 91: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 92: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 93: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 94: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 95: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 96: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 97: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 98: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 99: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 100: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 101: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 102: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 103: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 104: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 105: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 106: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 107: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 108: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 109: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 110: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 111: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 112: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 113: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 114: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 115: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 116: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 117: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 118: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 119: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 120: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 121: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 122: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 123: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 124: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 125: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 126: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 127: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 128: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 129: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 130: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 131: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 132: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 133: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 134: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 135: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 136: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 137: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 138: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 139: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 140: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 141: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 142: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 143: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 144: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 145: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 146: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 147: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 148: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 149: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 150: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 151: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 152: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 153: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 154: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 155: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 156: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 157: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 158: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 159: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 160: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 161: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 162: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 163: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 164: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 165: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 166: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 167: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 168: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 169: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 170: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 171: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 172: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 173: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 174: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 175: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 176: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 177: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 178: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 179: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 180: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 181: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 182: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 183: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 184: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 185: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 186: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 187: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 188: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 189: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 190: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 191: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 192: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 193: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 194: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 195: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 196: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 197: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 198: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+config 199: {'default_camera': {'pos': array([0.  , 0.85, 0.  ]), 'angle': array([ 0.        , -1.57079633,  0.        ]), 'width': 720, 'height': 720}}
+  [proprio] model is proprio-fused; stats from simulation/data/rope/rope_full_dataset.h5
+loaded model: 18.18M params from training/runs/rope_proprio_v1/ckpt_final.pt
+  [proprio] loaded z-score stats from simulation/data/rope/rope_full_dataset.h5 (dim=8)
+  [1/8] cfg=0  MPC final=0.530 max=0.572  |  expert final=0.926 max=0.972  |  lat=585ms
+  [2/8] cfg=1  MPC final=0.359 max=0.843  |  expert final=0.959 max=0.976  |  lat=583ms
+  [3/8] cfg=2  MPC final=0.979 max=0.979  |  expert final=0.998 max=0.999  |  lat=586ms
+  [4/8] cfg=3  MPC final=0.358 max=0.358  |  expert final=0.981 max=0.995  |  lat=595ms
+  [5/8] cfg=4  MPC final=0.287 max=0.858  |  expert final=0.909 max=0.961  |  lat=588ms
+  [6/8] cfg=5  MPC final=0.656 max=0.838  |  expert final=0.930 max=0.976  |  lat=589ms
+  [7/8] cfg=6  MPC final=0.271 max=0.465  |  expert final=0.887 max=0.962  |  lat=584ms
+  [8/8] cfg=7  MPC final=0.530 max=0.632  |  expert final=0.868 max=0.991  |  lat=584ms
+
+========== IMITATE SUMMARY (goal_offset=5) ==========
+episodes:        8
+start perf:      mean=0.528
+MPC final perf:  mean=0.496  median=0.444
+expert final:    mean=0.932  (upper bound)
+MPC improvement over start: -0.032
+MPC / expert ratio:         53.2%
+wrote eval/runs/cmp_proprio_nohold/summary_k5.json  (+ gifs in eval/runs/cmp_proprio_nohold/gifs)
+================ DONE ================

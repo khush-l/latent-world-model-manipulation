@@ -17,3 +17,8 @@ h5py==3.16.0
 numpy==2.4.6
 einops==0.8.2
 matplotlib==3.10.9
+
+# Optional — only required when training/train.py is run with --wandb.
+# Login once with `wandb login`; then pass
+#   --wandb --wandb-entity <team> --wandb-project <name>
+wandb==0.18.7

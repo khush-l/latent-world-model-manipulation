@@ -17,14 +17,18 @@ build/
 venv/
 .env/
 
-# Training outputs (metrics, checkpoints, plots)
-# training/runs/
+# Training outputs (metrics, checkpoints, plots) — large; commit deliberately with -f
+training/runs/
+
+# Eval run outputs (gifs, summaries) — large; commit specific assets with -f
+eval/runs/
 
 # Simulation artifacts
 simulation/data/
 simulation/softagent/data/
 simulation/softagent/log/
 simulation/softagent/logs/
+simulation/softgym/files/
 simulation/softgym/cached_initial_states/*
 simulation/softgym/envs/corl_cached_state_backup
 simulation/PyFlex/demo/compiler/makelinux64/.deps

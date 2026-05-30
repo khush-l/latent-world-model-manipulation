@@ -85,9 +85,10 @@ Direct filter usage:
 ```
 
 Current finding: the first rope scripted set is good enough to filter directly
-(137/150 demos passed `>= 0.8`). The first cloth scripted set is not good enough
-for final imitation training, so cloth needs the improved `cloth_geometric_v2`
-pilot/full collection path.
+(137/150 demos passed `>= 0.8`). Cloth final-demo collection is paused after
+merging origin/main because the shared collector now exposes RopeFlatten
+`geometric`/`manipulate` policies; add a ClothFlatten policy there before
+rerunning cloth collection.
 
 ## LeRobot Conversion
 

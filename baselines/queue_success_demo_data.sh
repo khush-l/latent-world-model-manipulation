@@ -17,7 +17,7 @@ cd "$ROOT"
 case "$TASK" in
   rope)
     ENV_NAME=RopeFlatten
-    POLICY=rope_geometric_v2
+    POLICY=geometric
     HORIZON=75
     INSTRUCTION="straighten the rope"
     REPO_ID="khush/softgym-ropeflatten-success-demos"
@@ -32,8 +32,12 @@ case "$TASK" in
     FULL_EPISODES=1000
     ;;
   cloth)
+    echo "cloth success-demo collection is disabled after merging origin/main:" >&2
+    echo "simulation/utils/collect_trajectories.py now supports RopeFlatten geometric/manipulate policies only." >&2
+    echo "Add a ClothFlatten policy to simulation/utils/geometric_policy.py before rerunning cloth collection." >&2
+    exit 2
     ENV_NAME=ClothFlatten
-    POLICY=cloth_corner_oracle
+    POLICY=geometric
     HORIZON=150
     INSTRUCTION="flatten the cloth"
     REPO_ID="khush/softgym-clothflatten-success-demos"
