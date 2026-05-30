@@ -103,6 +103,66 @@ def fig_method_bar(runs_dir, k, out):
     print(f"  wrote {out}")
 
 
+def fig_success_bar(runs_dir, k, out, margin=0.10):
+    """Success rate by method at offset k. Success = the MPC rollout flattened
+    the rope by >= `margin` normalized performance above its start state."""
+    specs = [
+        ("random_k%d" % k,    "Random",            "#9e9e9e"),
+        ("cem_base_k%d" % k,  "CEM (paper)",       "#ff9800"),
+        ("grad_base_k%d" % k, "Gradient (ours)\nbaseline", "#1e88e5"),
+        ("grad_prop_k%d" % k, "Gradient (ours)\nproprio",  "#43a047"),
+    ]
+    labels, rates, ns, colors = [], [], [], []
+    for d, name, c in specs:
+        eps = _load_run(Path(runs_dir) / d)
+        if not eps:
+            continue
+        succ = np.array([(e["mpc_max"] - e["start_perf"]) >= margin for e in eps], dtype=float)
+        labels.append(name); rates.append(100 * succ.mean()); ns.append(len(eps)); colors.append(c)
+    if not labels:
+        print("  [success_bar] no runs found — skipping")
+        return
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    x = np.arange(len(labels))
+    ax.bar(x, rates, color=colors, edgecolor="black", linewidth=0.6, width=0.6)
+    for xi, r, n in zip(x, rates, ns):
+        ax.text(xi, r + 1.5, f"{r:.0f}%", ha="center", va="bottom", fontsize=11, fontweight="bold")
+        ax.text(xi, 2, f"n={n}", ha="center", va="bottom", fontsize=8, color="white")
+    ax.set_xticks(x); ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylabel("MPC rollout success rate (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title(f"RopeFlatten: MPC success rate (k={k})\n"
+                 f"success = flattened by ≥ {margin:g} normalized performance over start")
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+    print(f"  wrote {out}")
+
+
+def fig_success_vs_k(runs_dir, ks, out, margin=0.10):
+    """Success rate vs planning horizon k (gradient planner), with the random
+    baseline as a reference line."""
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for tmpl, name, c, mk in [("grad_base_k%d", "Gradient baseline", "#1e88e5", "o"),
+                              ("grad_prop_k%d", "Gradient proprio", "#43a047", "s")]:
+        xs, ys = [], []
+        for k in ks:
+            eps = _load_run(Path(runs_dir) / (tmpl % k))
+            if not eps:
+                continue
+            xs.append(k); ys.append(100 * np.mean([(e["mpc_max"] - e["start_perf"]) >= margin for e in eps]))
+        if xs:
+            ax.plot(xs, ys, marker=mk, color=c, label=name, linewidth=2, markersize=7)
+    rnd = _load_run(Path(runs_dir) / ("random_k%d" % ks[min(1, len(ks)-1)])) or _load_run(Path(runs_dir) / "random_k5")
+    if rnd:
+        r = 100 * np.mean([(e["mpc_max"] - e["start_perf"]) >= margin for e in rnd])
+        ax.axhline(r, color="#9e9e9e", linestyle="--", linewidth=1.6, label=f"Random ({r:.0f}%)")
+    ax.set_xlabel("Goal offset k"); ax.set_ylabel("MPC success rate (%)")
+    ax.set_ylim(0, 100); ax.set_title(f"MPC success rate vs planning horizon (≥{margin:g} flatten)")
+    ax.grid(alpha=0.3); ax.legend()
+    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+    print(f"  wrote {out}")
+
+
 def fig_horizon_curve(runs_dir, ks, out):
     """Δmax vs goal-offset k, one line per model."""
     models = [("grad_base_k%d", "Baseline", "#1e88e5", "o"),
@@ -196,6 +256,8 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     ks = [int(x) for x in args.ks.split(",")]
 
+    fig_success_bar(args.runs_dir, args.k_bar, out_dir / "success_rate.png")
+    fig_success_vs_k(args.runs_dir, ks, out_dir / "success_vs_k.png")
     fig_method_bar(args.runs_dir, args.k_bar, out_dir / "method_bar.png")
     fig_horizon_curve(args.runs_dir, ks, out_dir / "horizon_curve.png")
     fig_within_episode(args.runs_dir, args.k_bar, out_dir / "within_episode.png")
