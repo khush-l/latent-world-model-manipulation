@@ -79,7 +79,7 @@ class GeometricRopeFlattenPolicy(object):
 
     def __init__(self, action_space, num_picker=2, noise_scale=0.02,
                  lateral_scale=1.0, lift_height=0.05, action_gain=0.3,
-                 max_speed_scale=0.35, deadband=5e-4, rng=None):
+                 max_speed_scale=0.35, deadband=5e-4, rng=None, action_repeat=8):
         assert num_picker == 2, "GeometricRopeFlattenPolicy assumes 2 pickers"
         assert 0.0 < max_speed_scale <= 1.0
         self.action_space = action_space
@@ -88,6 +88,7 @@ class GeometricRopeFlattenPolicy(object):
         self.lateral_scale = float(lateral_scale)
         self.lift_height = float(lift_height)
         self.action_gain = float(action_gain)
+        self.action_repeat = int(action_repeat)  # env applies this many substeps/step
         self.max_speed_scale = float(max_speed_scale)
         self.deadband = float(deadband)
         self.rng = rng if rng is not None else np.random
@@ -184,6 +185,13 @@ class GeometricRopeFlattenPolicy(object):
             noise = self.rng.randn(*deltas.shape).astype(np.float32)
             noise *= (self.noise_scale * np.abs(deltas))
             deltas = np.clip(deltas + noise, self.delta_low, self.delta_high)
+
+        # Anti-overshoot: the env applies `action_repeat` substeps, so the real
+        # per-step motion is ~action_repeat * delta. Cap each delta so the picker
+        # never travels PAST the target in one recorded step (the root cause of
+        # the bang-bang oscillation: effective gain action_repeat*action_gain>>1).
+        cap = np.abs(self.targets[:, :3] - picker_xyz) / float(self.action_repeat)
+        deltas = np.clip(deltas, -cap, cap)
 
         # Deadband: any per-axis command below this threshold is zeroed. Kills
         # proportional-control oscillation during HOLD/GRIP where the rope
@@ -288,13 +296,14 @@ class SmoothRopeManipulationPolicy(object):
     def __init__(self, action_space, num_picker=2, noise_scale=0.02,
                  action_gain=0.3, max_speed_scale=0.35, deadband=5e-4,
                  lift_height=0.08, settle_steps=3, num_waypoints=3,
-                 grip_margin=0.05, rng=None):
+                 grip_margin=0.05, rng=None, action_repeat=8):
         assert num_picker == 2
         assert 0.0 < max_speed_scale <= 1.0
         self.action_space = action_space
         self.num_picker = num_picker
         self.noise_scale = float(noise_scale)
         self.action_gain = float(action_gain)
+        self.action_repeat = int(action_repeat)  # env applies this many substeps/step
         self.max_speed_scale = float(max_speed_scale)
         self.deadband = float(deadband)
         self.lift_height = float(lift_height)
@@ -369,6 +378,12 @@ class SmoothRopeManipulationPolicy(object):
             noise = self.rng.randn(*deltas.shape).astype(np.float32)
             noise *= (self.noise_scale * np.abs(deltas))
             deltas = np.clip(deltas + noise, self.delta_low, self.delta_high)
+
+        # Anti-overshoot: env applies action_repeat substeps, so cap each delta
+        # so the picker never travels past the target in one recorded step
+        # (root cause of the bang-bang oscillation; see GeometricRopeFlattenPolicy).
+        cap = np.abs(self.targets[:, :3] - picker_xyz) / float(self.action_repeat)
+        deltas = np.clip(deltas, -cap, cap)
 
         # Deadband.
         deltas = np.where(np.abs(deltas) < self.deadband, 0.0, deltas)
@@ -486,6 +501,7 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
             max_speed_scale=max_speed_scale,
             deadband=deadband,
             rng=rng,
+            action_repeat=getattr(env, "action_repeat", 8),
         )
     if kind == "manipulate":
         return SmoothRopeManipulationPolicy(
@@ -498,5 +514,6 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
             lift_height=max(lift_height, 0.08),
             num_waypoints=num_waypoints,
             rng=rng,
+            action_repeat=getattr(env, "action_repeat", 8),
         )
     raise ValueError("unknown policy kind: %r" % kind)
