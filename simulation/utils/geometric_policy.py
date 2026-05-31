@@ -475,6 +475,97 @@ class SmoothRopeManipulationPolicy(object):
         self.phase_step = 0
 
 
+class PushRopePolicy(object):
+    """Push the rope around WITHOUT grabbing (grip stays 0). The pickers descend
+    to the rope plane, then sweep through smooth random waypoints near the rope,
+    shoving it by collision. Smooth (anti-overshoot) like the grab policies — it
+    gives the world model clean push/collision dynamics, not just grasp dynamics.
+    """
+
+    DESCEND, SWEEP = 0, 1
+
+    def __init__(self, action_space, num_picker=2, noise_scale=0.02,
+                 action_gain=0.3, max_speed_scale=0.35, deadband=5e-4,
+                 num_waypoints=4, plane_y=0.04, spread=0.18, rng=None, action_repeat=8):
+        assert num_picker == 2
+        self.action_space = action_space
+        self.num_picker = num_picker
+        self.noise_scale = float(noise_scale)
+        self.action_gain = float(action_gain)
+        self.action_repeat = int(action_repeat)
+        self.deadband = float(deadband)
+        self.num_waypoints = int(num_waypoints)
+        self.plane_y = float(plane_y)
+        self.spread = float(spread)
+        self.rng = rng if rng is not None else np.random
+        self.delta_high = (max_speed_scale * action_space.high[:3]).astype(np.float32)
+        self.delta_low = (max_speed_scale * action_space.low[:3]).astype(np.float32)
+        self.grip = np.zeros(num_picker, dtype=np.float32)
+        self.phase = self.DESCEND
+        self.phase_step = 0
+        self.targets = None
+        self.waypoint_seqs = None
+        self.waypoint_idx = 0
+
+    def _sample_waypoints(self, center):
+        wps = np.zeros((self.num_picker, self.num_waypoints, 3), np.float32)
+        for i in range(self.num_picker):
+            for k in range(self.num_waypoints):
+                xz = center[[0, 2]] + self.rng.uniform(-self.spread, self.spread, size=2).astype(np.float32)
+                wps[i, k] = [xz[0], self.plane_y, xz[1]]
+        return wps
+
+    def reset(self):
+        ep0, ep1, _ = _rope_endpoints()
+        ep0 = np.asarray(ep0, np.float32); ep1 = np.asarray(ep1, np.float32)
+        center = 0.5 * (ep0 + ep1)
+        # Descend to the rope's MEASURED height (like the grab policies' DESCEND
+        # target) so the picker sphere is in the rope's plane and actually
+        # collides with it — a hardcoded plane height misses the rope.
+        self.plane_y = float(0.5 * (ep0[1] + ep1[1]))
+        picker_xyz = _picker_xyz(self.num_picker)
+        self.targets = picker_xyz.copy()
+        self.targets[:, 1] = self.plane_y                 # descend to rope plane
+        self.waypoint_seqs = self._sample_waypoints(center)
+        self.waypoint_idx = 0
+        self.phase = self.DESCEND
+        self.phase_step = 0
+        self.grip[:] = 0.0
+
+    def get_action(self):
+        picker_xyz = _picker_xyz(self.num_picker)
+        max_err = float(np.max(np.abs(self.targets - picker_xyz)))
+        reached = max_err < 0.5 * float(np.max(self.delta_high))
+        budget = 12 if self.phase == self.DESCEND else 25
+        if reached or self.phase_step >= budget:
+            if self.phase == self.DESCEND:
+                self.phase = self.SWEEP
+                self.targets = self.waypoint_seqs[:, 0, :].copy()
+                self.waypoint_idx = 0
+            else:  # cycle through sweep waypoints
+                self.waypoint_idx = (self.waypoint_idx + 1) % self.num_waypoints
+                self.targets = self.waypoint_seqs[:, self.waypoint_idx, :].copy()
+            self.phase_step = 0
+
+        deltas = np.zeros((self.num_picker, 3), np.float32)
+        for i in range(self.num_picker):
+            err = self.targets[i] - picker_xyz[i]
+            deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+        if self.noise_scale > 0.0:
+            noise = self.rng.randn(*deltas.shape).astype(np.float32) * (self.noise_scale * np.abs(deltas))
+            deltas = np.clip(deltas + noise, self.delta_low, self.delta_high)
+        cap = np.abs(self.targets[:, :3] - picker_xyz) / float(self.action_repeat)  # anti-overshoot
+        deltas = np.clip(deltas, -cap, cap)
+        deltas = np.where(np.abs(deltas) < self.deadband, 0.0, deltas)
+
+        action = np.zeros(4 * self.num_picker, dtype=np.float32)
+        for i in range(self.num_picker):
+            action[4 * i:4 * i + 3] = deltas[i]
+            action[4 * i + 3] = 0.0                        # grip OFF: push, never grab
+        self.phase_step += 1
+        return action
+
+
 # Factory used by collect_trajectories.py
 def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
                 lift_height=0.05, action_gain=0.3, max_speed_scale=0.35,
@@ -513,6 +604,18 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
             deadband=deadband,
             lift_height=max(lift_height, 0.08),
             num_waypoints=num_waypoints,
+            rng=rng,
+            action_repeat=getattr(env, "action_repeat", 8),
+        )
+    if kind == "push":
+        return PushRopePolicy(
+            action_space=env.action_space,
+            num_picker=num_picker,
+            noise_scale=noise_scale,
+            action_gain=action_gain,
+            max_speed_scale=max_speed_scale,
+            deadband=deadband,
+            num_waypoints=max(num_waypoints, 4),
             rng=rng,
             action_repeat=getattr(env, "action_repeat", 8),
         )

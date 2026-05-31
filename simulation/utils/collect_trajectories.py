@@ -68,7 +68,7 @@ def parse_args():
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
-        choices=("random", "geometric", "manipulate"),
+        choices=("random", "geometric", "manipulate", "push"),
         default="random",
         help="Behavior policy. 'random' = uniform sample over action space. "
              "'geometric' = scripted state-machine policy (currently only "
@@ -320,7 +320,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         append_state(full_state_buffers, extract_state_arrays(env))
 
     policy_obj = None
-    if args.policy in ("geometric", "manipulate"):
+    if args.policy in ("geometric", "manipulate", "push"):
         from geometric_policy import make_policy
         policy_obj = make_policy(
             env_name=args.env_name,
@@ -383,7 +383,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "proprio_dim": int(proprio_dim),
         "state_dim": int(STATE_DIM),
     }
-    if args.policy in ("geometric", "manipulate"):
+    if args.policy in ("geometric", "manipulate", "push"):
         metadata["behavior_policy"] = "rope_" + args.policy
         metadata["script_noise_scale"] = float(args.script_noise_scale)
         metadata["script_lateral_scale"] = float(args.script_lateral_scale)

@@ -46,6 +46,7 @@ docker_common_args() {
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
     -e "SOFTGYM_PICKER_COLOR=${SOFTGYM_PICKER_COLOR:-}"
+    -e "SOFTGYM_HORIZON=${SOFTGYM_HORIZON:-}"
     -v "$DOCKER_REPO_ROOT:$CONTAINER_ROOT"
     -w "$CONTAINER_ROOT"
   )

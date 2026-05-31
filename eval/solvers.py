@@ -24,7 +24,8 @@ class CEMSolver:
     """
 
     def __init__(self, cost_model, horizon, num_samples=300, n_steps=30,
-                 topk=30, var_scale=1.0, min_std=0.05, device="cuda", seed=1234):
+                 topk=30, var_scale=1.0, min_std=0.05, device="cuda", seed=1234,
+                 freeze_idx=None, freeze_val=None):
         self.cost = cost_model
         self.horizon = horizon
         self.num_samples = num_samples
@@ -38,6 +39,18 @@ class CEMSolver:
         # normalized action box for clipping
         self.low = cost_model.norm_low.view(1, 1, 1, -1)
         self.high = cost_model.norm_high.view(1, 1, 1, -1)
+        # Optional: pin certain action dims to a fixed NORMALIZED value for every
+        # candidate (e.g. confine to the ground plane by freezing the vertical
+        # delta to raw-0). Keeps the optimization consistent with execution.
+        self.freeze_idx = (torch.as_tensor(freeze_idx, dtype=torch.long, device=device)
+                           if freeze_idx else None)
+        self.freeze_val = (torch.as_tensor(freeze_val, dtype=torch.float32, device=device)
+                           if freeze_val is not None else None)
+
+    def _apply_freeze(self, x):
+        if self.freeze_idx is not None:
+            x[..., self.freeze_idx] = self.freeze_val
+        return x
 
     @torch.no_grad()
     def solve(self, info_dict: dict, init_mean: torch.Tensor | None = None) -> dict:
@@ -54,6 +67,7 @@ class CEMSolver:
                 pad = torch.zeros(B, H - mean.shape[1], A, device=dev)
                 mean = torch.cat([mean, pad], dim=1)
         std = self.var_scale * torch.ones(B, H, A, device=dev)
+        mean = self._apply_freeze(mean)
 
         cost_history = []
         for _ in range(self.n_steps):
@@ -61,12 +75,13 @@ class CEMSolver:
             cand = mean.unsqueeze(1) + std.unsqueeze(1) * noise   # (B,S,H,A)
             cand[:, 0] = mean                                     # keep current mean
             cand = torch.clamp(cand, self.low, self.high)
+            cand = self._apply_freeze(cand)                       # pin frozen dims
 
             costs = self.cost.get_cost(info_dict, cand)           # (B,S)
             topk_vals, topk_idx = torch.topk(costs, k=self.topk, dim=1, largest=False)
             bidx = torch.arange(B, device=dev).unsqueeze(1).expand(-1, self.topk)
             elites = cand[bidx, topk_idx]                         # (B,topk,H,A)
-            mean = elites.mean(dim=1)
+            mean = self._apply_freeze(elites.mean(dim=1))
             std = elites.std(dim=1).clamp_min(self.min_std)
             cost_history.append(float(topk_vals.mean().item()))
 

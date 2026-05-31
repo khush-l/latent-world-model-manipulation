@@ -77,6 +77,10 @@ def main():
     p.add_argument("--cem-iters", type=int, default=30)
     p.add_argument("--cem-topk", type=int, default=30)
     p.add_argument("--planner", choices=("cem", "random"), default="cem")
+    p.add_argument("--confine-2d", action="store_true",
+                   help="Confine pickers to the ground plane (freeze vertical action dims).")
+    p.add_argument("--grab-steps", type=int, default=0,
+                   help="Scripted descend+grip steps before MPC, to put pickers on the rope plane.")
     p.add_argument("--success-thresh", type=float, default=0.8)
     p.add_argument("--img-size", type=int, default=128)
     p.add_argument("--env-name", default="RopeFlatten")
@@ -106,8 +110,18 @@ def main():
     cost = LeWMCost(model, ACTION_LOW, ACTION_HIGH, history_size=H,
                     action_mean=a_mean, action_std=a_std,
                     proprio_mean=p_mean, proprio_std=p_std, device=device)
+    # --confine-2d: pin each picker's vertical delta (action dims 1 & 5, the
+    # y/up axis) to raw 0 so the pickers only slide in the ground plane. The
+    # frozen value is raw-0 expressed in the solver's normalized space.
+    freeze_idx = freeze_val = None
+    if args.confine_2d:
+        vdims = [1, 5]
+        freeze_idx = vdims
+        freeze_val = [float((-a_mean[d] / a_std[d]).item()) for d in vdims]
+        print(f"  [confine-2d] freezing vertical action dims {vdims} to raw 0")
     solver = CEMSolver(cost, horizon=args.horizon, num_samples=args.cem_samples,
-                       n_steps=args.cem_iters, topk=args.cem_topk, device=device, seed=args.seed)
+                       n_steps=args.cem_iters, topk=args.cem_topk, device=device, seed=args.seed,
+                       freeze_idx=freeze_idx, freeze_val=freeze_val)
     A = cost.action_dim
 
     env = SubprocessSoftgym(env_name=args.env_name, num_variations=args.num_variations,
@@ -143,6 +157,26 @@ def main():
             warm = None
             plan_buf = collections.deque()  # normalized actions to execute
             perfs, frames, lat = [], [obs["pixels"]], []
+
+            # Pre-grab: scripted descent so the pickers reach the rope plane and
+            # grab on contact BEFORE the (optionally 2D-confined) MPC takes over.
+            # Fixes the "can't descend to grab" failure of plan-time 2D freezing.
+            if args.grab_steps > 0:
+                descend = np.zeros(A, np.float32)
+                descend[1] = -0.01; descend[5] = -0.01     # both pickers move down (y axis)
+                descend[3] = 1.0;  descend[7] = 1.0        # grip engaged -> grab on contact
+                for _ in range(args.grab_steps):
+                    step_out = env.step(descend)
+                    perfs.append(float(step_out["info"].get("normalized_performance",
+                                       step_out["info"].get("performance", 0.0))))
+                    frames.append(step_out["pixels"])
+                    pix_hist.append(torch.from_numpy(_to_imagenet_float(step_out["pixels"])).float())
+                    prop_hist.append(torch.from_numpy(np.asarray(step_out["proprio"], np.float32)))
+                    act_hist.append(torch.from_numpy(descend))
+                    if step_out["done"]:
+                        break
+                held = prop_hist[-1][6:8].tolist()         # hold flags after descent
+                print(f"    [pre-grab] {args.grab_steps} steps; picker hold flags={held}")
 
             for t in range(args.eval_budget):
                 if args.planner == "random":

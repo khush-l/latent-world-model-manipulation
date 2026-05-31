@@ -133,6 +133,15 @@ class EnvSession(object):
         if env_seed is not None:
             np.random.seed(int(env_seed))
         self.env = env_class(**kwargs)
+        # Optional: override the env's episode horizon (e.g. SOFTGYM_HORIZON=500)
+        # to run much longer MPC rollouts than the default (RopeFlatten=75).
+        _h = os.environ.get("SOFTGYM_HORIZON", "").strip()
+        if _h:
+            try:
+                self.env.horizon = int(_h)
+                print("[env] horizon overridden -> %d" % self.env.horizon)
+            except Exception as e:  # noqa: BLE001
+                print("[env] ignoring SOFTGYM_HORIZON=%r: %s" % (_h, e))
         self.env_name = env_name
         self.img_size = int(img_size)
         self.num_picker = int(num_picker)
