@@ -72,7 +72,9 @@ def main():
     p.add_argument("--eval-budget", type=int, default=75)
     p.add_argument("--history-size", type=int, default=3)
     p.add_argument("--horizon", type=int, default=5, help="CEM plan length (future actions)")
-    p.add_argument("--receding-horizon", type=int, default=1, help="steps executed before replanning")
+    p.add_argument("--receding-horizon", type=int, default=-1,
+                   help="steps executed before replanning; -1 => equal to --horizon "
+                        "(LeWM reference: receding_horizon == horizon, execute the whole plan)")
     p.add_argument("--cem-samples", type=int, default=300)
     p.add_argument("--cem-iters", type=int, default=30)
     p.add_argument("--cem-topk", type=int, default=30)
@@ -93,12 +95,30 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     gif_dir = out_dir / "gifs"; gif_dir.mkdir(exist_ok=True)
     H = args.history_size
+    # LeWM reference ties receding_horizon to horizon (execute the full plan before
+    # replanning); -1 resolves to that. Pass a smaller value to re-ground more often.
+    recede = args.horizon if args.receding_horizon < 0 else args.receding_horizon
+    print(f"[plan] horizon={args.horizon} receding_horizon={recede} "
+          f"cem(samples={args.cem_samples}, iters={args.cem_iters}, topk={args.cem_topk}) "
+          f"{'[LeWM-matched]' if recede == args.horizon else ''}")
 
     # --- model (proprio auto-detected from sibling config.json) ---
     cfg_path = Path(args.ckpt).parent / "config.json"
     train_cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
     use_proprio = bool(train_cfg.get("use_proprio", False))
-    model = build_lewm(history_size=H, use_proprio=use_proprio).to(device)
+    # Build the EXACT arch from the checkpoint's config (embed_dim/patch/predictor
+    # may differ from defaults, e.g. the d384 capacity-sweep runs).
+    model = build_lewm(
+        img_size=train_cfg.get("img_size", 128),
+        patch_size=train_cfg.get("patch_size", 16),
+        embed_dim=train_cfg.get("embed_dim", 192),
+        predictor_depth=train_cfg.get("predictor_depth", 6),
+        predictor_heads=train_cfg.get("predictor_heads", 16),
+        predictor_dim_head=train_cfg.get("predictor_dim_head", 64),
+        predictor_dropout=train_cfg.get("predictor_dropout", 0.1),
+        history_size=H, num_preds=train_cfg.get("num_preds", 1),
+        use_proprio=use_proprio,
+    ).to(device)
     state = torch.load(args.ckpt, map_location=device)
     state = state.get("model_state_dict", state) if isinstance(state, dict) else state
     model.load_state_dict(state); model.eval()
@@ -197,7 +217,7 @@ def main():
                         torch.cuda.synchronize() if device == "cuda" else None
                         lat.append(time.perf_counter() - t0)
                         plan = out["actions"][0]  # (horizon, A) normalized
-                        keep = args.receding_horizon
+                        keep = recede
                         for j in range(min(keep, plan.shape[0])):
                             plan_buf.append(plan[j])
                         tail = plan[keep:]

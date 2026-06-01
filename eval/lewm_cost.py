@@ -133,8 +133,8 @@ class LeWMCost:
     # ---- cost ----
 
     @torch.no_grad()
-    def get_cost(self, info_dict: dict, candidates: torch.Tensor) -> torch.Tensor:
-        """Terminal latent distance to goal for each candidate plan.
+    def _rollout(self, info_dict: dict, candidates: torch.Tensor) -> torch.Tensor:
+        """Imagined latent trajectory for each candidate plan.
 
         info_dict (all per-env, batch B):
             hist_emb:        (B, H, D)    encoded history latents (s_0..s_{H-1})
@@ -142,7 +142,7 @@ class LeWMCost:
             start_proprio:   (B, P)       raw current proprio (s_{H-1}); optional
             hist_proprio_norm:(B, H, P)   normalized real history proprio; optional
         candidates:          (B, S, n, A) NORMALIZED planned actions (a_{H-1}..)
-        Returns: cost (B, S)
+        Returns: emb_seq (B*S, H+n, D) = [s_0..s_{H-1} history, s_H..s_{H-1+n} imagined]
         """
         H = self.H
         B, S, n, A = candidates.shape
@@ -151,7 +151,6 @@ class LeWMCost:
 
         hist_emb = info_dict["hist_emb"].to(dev)              # (B,H,D)
         hist_act = info_dict["hist_act_norm"].to(dev)         # (B,H-1,A)
-        goal = self._goal_emb.to(dev)                         # (D,)
 
         # Flatten (B,S) -> N for batched rollout.
         N = B * S
@@ -189,6 +188,25 @@ class LeWMCost:
             pred = self.model.predict(win_emb, win_cond)[:, -1]  # (N, D)
             emb_list.append(pred)
 
-        terminal = emb_list[-1]                                # (N, D) = s_{H-1+n}
+        return torch.stack(emb_list, dim=1)                    # (N, H+n, D)
+
+    @torch.no_grad()
+    def get_cost(self, info_dict: dict, candidates: torch.Tensor) -> torch.Tensor:
+        """Terminal latent distance to goal for each candidate plan. Returns (B, S)."""
+        B, S = candidates.shape[:2]
+        goal = self._goal_emb.to(self.device)                 # (D,)
+        emb_seq = self._rollout(info_dict, candidates)         # (B*S, H+n, D)
+        terminal = emb_seq[:, -1]                              # (N, D) = s_{H-1+n}
         cost = ((terminal - goal.unsqueeze(0)) ** 2).sum(dim=-1)  # (N,)
         return cost.reshape(B, S)
+
+    @torch.no_grad()
+    def imagine(self, info_dict: dict, plan: torch.Tensor) -> torch.Tensor:
+        """Decode-ready imagined latents for ONE plan (B=S=1).
+
+        plan: (n, A) normalized planned actions.
+        Returns: (n+1, D) = [current s_{H-1}, then n imagined s_H..s_{H-1+n}].
+        """
+        cand = plan.to(self.device).unsqueeze(0).unsqueeze(0)  # (1,1,n,A)
+        emb_seq = self._rollout(info_dict, cand)[0]            # (H+n, D)
+        return emb_seq[self.H - 1:]                            # (n+1, D)

@@ -73,16 +73,20 @@ class CEMSolver:
         for _ in range(self.n_steps):
             noise = torch.randn(B, self.num_samples, H, A, generator=self.gen, device=dev)
             cand = mean.unsqueeze(1) + std.unsqueeze(1) * noise   # (B,S,H,A)
-            cand[:, 0] = mean                                     # keep current mean
-            cand = torch.clamp(cand, self.low, self.high)
-            cand = self._apply_freeze(cand)                       # pin frozen dims
+            cand[:, 0] = mean                                     # keep current mean (ref: candidates[:,0]=batch_mean)
+            # Faithful to the reference CEM (solver/cem.py): candidates are NOT
+            # clipped to the action box during optimization — actions are z-scored
+            # (std~1), so N(mean,std) samples already sit in the data distribution,
+            # and the env clamps at execution. _apply_freeze is our optional
+            # confine-2d add-on (no-op when freeze_idx is None).
+            cand = self._apply_freeze(cand)
 
             costs = self.cost.get_cost(info_dict, cand)           # (B,S)
             topk_vals, topk_idx = torch.topk(costs, k=self.topk, dim=1, largest=False)
             bidx = torch.arange(B, device=dev).unsqueeze(1).expand(-1, self.topk)
             elites = cand[bidx, topk_idx]                         # (B,topk,H,A)
             mean = self._apply_freeze(elites.mean(dim=1))
-            std = elites.std(dim=1).clamp_min(self.min_std)
+            std = elites.std(dim=1)                               # ref: var = topk.std (no min_std floor)
             cost_history.append(float(topk_vals.mean().item()))
 
         return {"actions": mean.detach(), "cost_history": cost_history}
