@@ -55,19 +55,19 @@ Do not commit large datasets, checkpoints, videos, Docker build output, or raw e
 
 ## What Should Go In Drive Or External Storage
 
-Put these in the shared Drive/rclone folder or another external store. Use a flat layout so the important artifacts are easy to find:
+Use a simple top-level Drive folder. Avoid uploading the LeRobot dataset as thousands of individual files because Google Drive/rclone is very slow on many small files.
+
+Recommended Drive layout:
 
 ```text
 cs231n-pi0-handoff/
   README_PI0_HANDOFF.txt
-  softgym-rope-openpi/
-  pi0_lora_checkpoint_19999/
+  lerobot_dataset_softgym_rope_openpi.tar
+  pi0_model_checkpoint_19999.tar
   ropeflatten_geometric_5k_v3.h5   # optional if already shared elsewhere
 ```
 
-The easiest teammate path is to share `softgym-rope-openpi/` and `pi0_lora_checkpoint_19999/` at the top level. The raw HDF5 is useful as source of truth, but does not need to be duplicated if it is already in Drive.
-
-Expected local paths on the H100:
+Expected local paths after extracting on the H100:
 
 ```text
 /home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5
@@ -75,28 +75,35 @@ Expected local paths on the H100:
 /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
 ```
 
-If using rclone, copy data into those paths before running train/eval:
-
-```bash
-mkdir -p /home/ubuntu/cs231n-project/training/data
-mkdir -p /home/ubuntu/lerobot_datasets/khush
-mkdir -p /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5
-
-# Only needed if the HDF5 is not already present.
-rclone copy <remote>:cs231n-pi0-handoff/ropeflatten_geometric_5k_v3.h5 /home/ubuntu/cs231n-project/training/data/
-
-rclone copy <remote>:cs231n-pi0-handoff/softgym-rope-openpi /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
-rclone copy <remote>:cs231n-pi0-handoff/pi0_lora_checkpoint_19999 /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
-```
-
-To upload the flat Drive layout from this instance:
+To upload the simple archive layout from this instance:
 
 ```bash
 cd /home/ubuntu/cs231n-project
 REMOTE=gdrive:cs231n-pi0-handoff baselines/pi0/upload_pi0_handoff_to_drive.sh
 ```
 
-By default that uploads only the converted dataset and checkpoint. Set `INCLUDE_RAW_H5=1` if the HDF5 also needs to be uploaded.
+By default that uploads only:
+
+```text
+lerobot_dataset_softgym_rope_openpi.tar
+pi0_model_checkpoint_19999.tar
+README_PI0_HANDOFF.txt
+```
+
+Set `INCLUDE_RAW_H5=1` only if the HDF5 also needs to be uploaded.
+
+To download/extract on the H100:
+
+```bash
+mkdir -p /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
+mkdir -p /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
+
+rclone copy <remote>:cs231n-pi0-handoff/lerobot_dataset_softgym_rope_openpi.tar /tmp/
+rclone copy <remote>:cs231n-pi0-handoff/pi0_model_checkpoint_19999.tar /tmp/
+
+tar -xf /tmp/lerobot_dataset_softgym_rope_openpi.tar -C /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
+tar -xf /tmp/pi0_model_checkpoint_19999.tar -C /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
+```
 
 ## One-Time Setup On H100
 
