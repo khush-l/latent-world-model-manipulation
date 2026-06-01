@@ -13,6 +13,7 @@ The output is always an 8D SoftGym picker action plus timing metadata.
 from __future__ import annotations
 
 import argparse
+import traceback
 import io
 import json
 import time
@@ -76,13 +77,9 @@ class OpenPIRuntime:
     def _example(self, image_hwc: np.ndarray, state: np.ndarray, task: str | None):
         image = _resize_image(image_hwc)
         state = np.asarray(state, dtype=np.float32).reshape(-1)
-        droid_state = np.zeros((8,), dtype=np.float32)
-        droid_state[: min(8, state.shape[0])] = state[: min(8, state.shape[0])]
         return {
-            "observation/exterior_image_1_left": image,
-            "observation/wrist_image_left": image,
-            "observation/joint_position": droid_state[:7],
-            "observation/gripper_position": droid_state[7:8],
+            "observation/images/front": image,
+            "observation/state": state,
             "prompt": task or self.task,
         }
 
@@ -167,6 +164,7 @@ def make_handler(runtime: OpenPIRuntime):
                 action, meta = runtime.predict(payload["image"], payload["state"], task)
                 self._send_json(200, {"action": action.tolist(), **meta})
             except Exception as exc:
+                traceback.print_exc()
                 self._send_json(500, {"error": repr(exc)})
 
         def log_message(self, fmt, *args):

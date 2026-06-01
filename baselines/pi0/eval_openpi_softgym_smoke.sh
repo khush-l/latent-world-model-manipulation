@@ -10,6 +10,7 @@ HOST_FOR_CONTAINER=${OPENPI_POLICY_HOST_FOR_CONTAINER:-172.17.0.1}
 OUT=${OPENPI_EVAL_OUT:-data/evals/pi0_rope_smoke}
 LOG=${OPENPI_SERVER_LOG:-"$REPO_ROOT/baselines/logs/pi0_softgym_server.log"}
 UV_BIN=${UV:-${HOME}/.local/share/uv-bootstrap/bin/uv}
+TIMEOUT_S=${OPENPI_TIMEOUT_S:-180}
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -54,6 +55,7 @@ cd "$REPO_ROOT/simulation"
   --checkpoint ${OPENPI_CHECKPOINT} \
   --num-episodes ${OPENPI_NUM_EPISODES:-3} \
   --horizon ${OPENPI_HORIZON:-75} \
+  --timeout-s ${TIMEOUT_S} \
   --img-size 128 \
   --success-threshold 0.8 \
   --save-every-video 1"
