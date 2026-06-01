@@ -19,6 +19,8 @@ Commit these scripts/docs because they are small and reproducible:
 baselines/H100_DIRECT_ACTION_EVAL_README.md
 baselines/run_h100_direct_action_evals.sh
 baselines/start_h100_direct_action_evals_tmux.sh
+baselines/run_h100_direct_action_retrain.sh
+baselines/start_h100_direct_action_retrain_tmux.sh
 baselines/plot_pi0_rope_lora_charts.py
 baselines/pi0/README.md
 baselines/pi0/bootstrap_openpi.sh
@@ -121,6 +123,26 @@ Expected converted dataset:
 /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
 OpenPI repo id in config: khush/softgym-rope-openpi
 ```
+
+## Optional: Retrain ACT / SmolVLA
+
+Most likely, use the existing ACT and SmolVLA checkpoints and skip this section. If fresh same-machine training is desired, run:
+
+```bash
+cd /home/ubuntu/cs231n-project
+baselines/start_h100_direct_action_retrain_tmux.sh
+```
+
+Defaults target the geometric rope dataset:
+
+```text
+DATASET_ROOT=/home/ubuntu/lerobot_datasets/softgym_ropeflatten_geometric_5k_v3
+DATASET_REPO=khush/softgym-ropeflatten-geometric-5k-v3
+ACT_STEPS=20000
+SMOLVLA_STEPS=20000
+```
+
+The retrain script prints the resulting `ACT_CHECKPOINT` and `SMOLVLA_CHECKPOINT` exports at the end. Use those when running `baselines/start_h100_direct_action_evals_tmux.sh`.
 
 ## Train π0 LoRA
 

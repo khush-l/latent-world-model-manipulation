@@ -111,6 +111,17 @@ simulation/data/evals/pi0_rope_lora_g5/videos/
 
 `OPENPI_TIMEOUT_S=180` matters because the first OpenPI/JAX policy call can include compilation. On the A10G run, the first call was about 42.7 seconds, while post-compile chunk-generation p50 was about 200.7 ms.
 
+## Optional ACT / SmolVLA Retrain
+
+The normal handoff expects existing ACT and SmolVLA checkpoints. If you want to retrain them on the H100 before evaluation, run:
+
+```bash
+cd /home/ubuntu/cs231n-project
+baselines/start_h100_direct_action_retrain_tmux.sh
+```
+
+This defaults to the geometric rope dataset and trains ACT for 20k steps and SmolVLA for 20k steps. It prints the checkpoint paths to export for the final H100 eval.
+
 ## H100 Fair Eval
 
 For final latency, run ACT, SmolVLA, π0 LoRA, and LeWM+MPC on the same H100. The direct-action runner is:
