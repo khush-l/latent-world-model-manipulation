@@ -37,7 +37,6 @@ baselines/pi0/softgym_hdf5_to_openpi_lerobot.py
 baselines/pi0/start_pi0_lora_eval_after_training_tmux.sh
 baselines/pi0/start_pi0_lora_training_tmux.sh
 baselines/pi0/train_pi0_lora_softgym_rope.sh
-baselines/pi0/upload_pi0_handoff_to_drive.sh
 baselines/pi0/verify_pi0_handoff.sh
 ```
 
@@ -53,57 +52,46 @@ baselines/results/pi0_rope_lora_g5/pi0_direct_action_report_table.csv
 
 Do not commit large datasets, checkpoints, videos, Docker build output, or raw eval folders unless your repo policy explicitly allows large artifacts.
 
-## What Should Go In Drive Or External Storage
+## Data Handoff
 
-Use a simple top-level Drive folder. Avoid uploading the LeRobot dataset as thousands of individual files because Google Drive/rclone is very slow on many small files.
-
-Recommended Drive layout:
+Only the raw SoftGym HDF5 needs to be shared externally:
 
 ```text
-cs231n-pi0-handoff/
-  README_PI0_HANDOFF.txt
-  lerobot_dataset_softgym_rope_openpi.tar
-  pi0_model_checkpoint_19999.tar
-  ropeflatten_geometric_5k_v3.h5   # optional if already shared elsewhere
+ropeflatten_geometric_5k_v3.h5
 ```
 
-Expected local paths after extracting on the H100:
+Expected location on the H100:
 
 ```text
 /home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5
-/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
-/home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
 ```
 
-To upload the simple archive layout from this instance:
+Then convert it locally into the OpenPI/LeRobot format:
 
 ```bash
 cd /home/ubuntu/cs231n-project
-REMOTE=gdrive:cs231n-pi0-handoff baselines/pi0/upload_pi0_handoff_to_drive.sh
+OPENPI_ROOT=/home/ubuntu/openpi \
+INPUT_H5=/home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5 \
+OUTPUT_ROOT=/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi \
+baselines/pi0/convert_pi0_softgym_rope_dataset.sh
 ```
 
-By default that uploads only:
-
-```text
-lerobot_dataset_softgym_rope_openpi.tar
-pi0_model_checkpoint_19999.tar
-README_PI0_HANDOFF.txt
-```
-
-Set `INCLUDE_RAW_H5=1` only if the HDF5 also needs to be uploaded.
-
-To download/extract on the H100:
+For a long conversion, run it in tmux:
 
 ```bash
-mkdir -p /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
-mkdir -p /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
-
-rclone copy <remote>:cs231n-pi0-handoff/lerobot_dataset_softgym_rope_openpi.tar /tmp/
-rclone copy <remote>:cs231n-pi0-handoff/pi0_model_checkpoint_19999.tar /tmp/
-
-tar -xf /tmp/lerobot_dataset_softgym_rope_openpi.tar -C /home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
-tar -xf /tmp/pi0_model_checkpoint_19999.tar -C /home/ubuntu/openpi/checkpoints/pi05_softgym_rope_lora/softgym_rope_lora_g5/19999
+tmux new-session -d -s pi0_convert \
+  "cd /home/ubuntu/cs231n-project && OPENPI_ROOT=/home/ubuntu/openpi INPUT_H5=/home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5 OUTPUT_ROOT=/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi baselines/pi0/convert_pi0_softgym_rope_dataset.sh"
 ```
+
+Expected converted dataset:
+
+```text
+/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
+5000 episodes / 375000 frames
+OpenPI repo id: khush/softgym-rope-openpi
+```
+
+If the π0 checkpoint is not copied separately, retrain it on the H100 with `baselines/pi0/start_pi0_lora_training_tmux.sh`.
 
 ## One-Time Setup On H100
 
@@ -124,27 +112,7 @@ cd /home/ubuntu/cs231n-project
 baselines/pi0/verify_pi0_handoff.sh
 ```
 
-On a fresh H100, this verifier may report missing data/checkpoints until Drive artifacts are copied. That is fine; missing repo scripts are not fine.
-
-## Dataset Conversion
-
-If the converted dataset is already copied to `/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi`, skip this step.
-
-If only the raw HDF5 is available:
-
-```bash
-cd /home/ubuntu/cs231n-project
-tmux new-session -d -s pi0_convert \
-  "cd /home/ubuntu/cs231n-project && OVERWRITE=1 baselines/pi0/convert_pi0_softgym_rope_dataset.sh"
-```
-
-Expected converted dataset:
-
-```text
-5000 episodes / 375000 frames
-/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi
-OpenPI repo id in config: khush/softgym-rope-openpi
-```
+On a fresh H100, this verifier may report missing data/checkpoints until the HDF5 is placed and conversion/training are run. That is fine; missing repo scripts are not fine.
 
 ## Optional: Retrain ACT / SmolVLA
 

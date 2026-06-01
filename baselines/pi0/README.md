@@ -27,18 +27,22 @@ action: 8D picker action
 prompt: straighten the rope
 ```
 
-If the converted dataset is not available, create it with:
+If the converted dataset is not available, put the raw HDF5 at `training/data/ropeflatten_geometric_5k_v3.h5` and create it with:
 
 ```bash
 cd /home/ubuntu/cs231n-project
-OVERWRITE=1 baselines/pi0/convert_pi0_softgym_rope_dataset.sh
+OPENPI_ROOT=/home/ubuntu/openpi \
+INPUT_H5=/home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5 \
+OUTPUT_ROOT=/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi \
+OVERWRITE=1 \
+baselines/pi0/convert_pi0_softgym_rope_dataset.sh
 ```
 
 For long conversion jobs:
 
 ```bash
 tmux new-session -d -s pi0_convert \
-  "cd /home/ubuntu/cs231n-project && OVERWRITE=1 baselines/pi0/convert_pi0_softgym_rope_dataset.sh"
+  "cd /home/ubuntu/cs231n-project && OPENPI_ROOT=/home/ubuntu/openpi INPUT_H5=/home/ubuntu/cs231n-project/training/data/ropeflatten_geometric_5k_v3.h5 OUTPUT_ROOT=/home/ubuntu/lerobot_datasets/khush/softgym-rope-openpi OVERWRITE=1 baselines/pi0/convert_pi0_softgym_rope_dataset.sh"
 ```
 
 ## Setup OpenPI
@@ -151,4 +155,4 @@ cd /home/ubuntu/cs231n-project
 baselines/pi0/verify_pi0_handoff.sh
 ```
 
-A fresh machine may report missing data/checkpoints until Drive artifacts are copied, but repo scripts should all be present and executable.
+A fresh machine may report missing data/checkpoints until the HDF5 is placed and conversion/training are run, but repo scripts should all be present and executable.
