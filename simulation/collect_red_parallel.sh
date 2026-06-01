@@ -40,10 +40,11 @@ SHARDS=${SHARDS:-5}
 MAX_PAR=${MAX_PAR:-4}
 IMG=${IMG:-128}
 COLOR=${COLOR:-"1,0,0"}
+[ "$COLOR" = "gray" ] && COLOR=""   # COLOR=gray -> no recolor (normal gray pickers)
 OUT_H5=${OUT_H5:-simulation/data/rope/rope_full_dataset_red.h5}
 if [[ "${SMOKE:-0}" == "1" ]]; then PER_POLICY=30; SHARDS=2; MAX_PAR=3; fi
 
-POLICIES=(random geometric manipulate)
+POLICIES=(${COLLECT_POLICIES:-random geometric manipulate})  # override e.g. COLLECT_POLICIES="geometric manipulate"
 SHARD_SIZE=$(( PER_POLICY / SHARDS ))
 DATA=simulation/data/rope_red          # host path (== data/rope_red in container)
 LOGS=$DATA/logs
