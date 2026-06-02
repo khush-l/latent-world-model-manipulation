@@ -90,7 +90,10 @@ def run_task(vv, log_dir, exp_name):
     initial_states, action_trajs, configs, all_infos = [], [], [], []
     for i in range(vv['test_episodes']):
         logger.log('episode ' + str(i))
-        obs = env.reset()
+        # Reset to a DISTINCT cached variation each episode (config_id=i). Without
+        # this, num_variations=1 makes every episode the same rope -> 10x duplicate
+        # data. Requires --num-variations >= test_episodes.
+        obs = env.reset(config_id=i)
         policy.reset()
         initial_state = env.get_state()
         action_traj = []

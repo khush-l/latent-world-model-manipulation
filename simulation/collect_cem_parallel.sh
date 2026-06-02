@@ -88,6 +88,7 @@ shard_pipe() {  # $1 = shard index
   {
     echo "[shard $i] CEM plan: $EP_PER_SHARD eps seed=$seed gpu=$gpu -> $cemdir"
     CUDA_VISIBLE_DEVICES=$gpu bash "$SOFTAGENT" cem --env-name "$ENV_NAME" --test-episodes "$EP_PER_SHARD" \
+      --num-variations "$EP_PER_SHARD" \
       --seed "$seed" --max-iters "$MAX_ITERS" --timestep-per-decision "$TPD" \
       --save-video False --exp-name "cem_shard$i" --log-dir "$cemdir" || return 1
     echo "[shard $i] replay -> npz (start-idx=$off, gpu=$gpu)"
