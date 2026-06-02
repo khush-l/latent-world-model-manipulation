@@ -74,7 +74,7 @@ def parse_args():
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
-        choices=("random", "geometric", "manipulate", "push", "configure"),
+        choices=("random", "geometric", "manipulate", "push", "configure", "route_u"),
         default="random",
         help="Behavior policy. 'random' = uniform sample over action space. "
              "'geometric' = scripted state-machine policy (currently only "
@@ -83,7 +83,9 @@ def parse_args():
              "middle rope particles and walks them through smooth waypoints "
              "(creates diverse rope configurations instead of always flat). "
              "'configure' = goal-conditioned RopeConfiguration oracle that "
-             "moves keypoints toward the target character.",
+             "moves keypoints toward the target character. "
+             "'route_u' = U-shaped cable-routing expert for the practical "
+             "RopeConfiguration task.",
     )
     parser.add_argument(
         "--script-num-waypoints",
@@ -156,6 +158,15 @@ def parse_args():
         default=20,
         help="Maximum attempts for each saved episode when an acceptance "
              "threshold is set.",
+    )
+    parser.add_argument(
+        "--min-recorded-horizon-for-acceptance",
+        type=int,
+        default=0,
+        help="If an acceptance threshold is set, reject otherwise-successful "
+             "episodes shorter than this many recorded actions. Useful for "
+             "excluding near-solved expert resets that provide little "
+             "interaction data.",
     )
     return parser.parse_args()
 
@@ -321,7 +332,7 @@ def append_info(info_buffers, info):
         info_buffers.setdefault(key, []).append(value)
 
 
-def reset_env(env, args):
+def reset_env(env, args, episode_idx=0, attempt_idx=0):
     if args.goal_character is None:
         return env.reset()
     if args.env_name != "RopeConfiguration":
@@ -332,12 +343,15 @@ def reset_env(env, args):
     ]
     if not candidates:
         raise RuntimeError("no cached RopeConfiguration configs for goal %s" % args.goal_character)
-    config_id = int(np.random.choice(candidates))
+    # Avoid duplicated forced-goal episodes inside expert datasets. This still
+    # varies failed retries, but is deterministic for reproducibility.
+    offset = int(args.seed) + int(episode_idx) * 997 + int(attempt_idx) * 37
+    config_id = int(candidates[offset % len(candidates)])
     return env.reset(config_id=config_id)
 
 
-def collect_episode(env, args, episode_idx, env_kwargs):
-    obs = reset_env(env, args)
+def collect_episode(env, args, episode_idx, env_kwargs, attempt_idx=0):
+    obs = reset_env(env, args, episode_idx=episode_idx, attempt_idx=attempt_idx)
     del obs
 
     num_picker = int(env_kwargs.get("num_picker", getattr(env.action_tool, "num_picker", 2)))
@@ -364,7 +378,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         append_state(full_state_buffers, extract_state_arrays(env))
 
     policy_obj = None
-    if args.policy in ("geometric", "manipulate", "push", "configure"):
+    if args.policy in ("geometric", "manipulate", "push", "configure", "route_u"):
         from geometric_policy import make_policy
         policy_obj = make_policy(
             env_name=args.env_name,
@@ -434,7 +448,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "proprio_dim": int(proprio_dim),
         "state_dim": int(STATE_DIM),
     }
-    if args.policy in ("geometric", "manipulate", "push", "configure"):
+    if args.policy in ("geometric", "manipulate", "push", "configure", "route_u"):
         metadata["behavior_policy"] = "rope_" + args.policy
         metadata["script_noise_scale"] = float(args.script_noise_scale)
         metadata["script_lateral_scale"] = float(args.script_lateral_scale)
@@ -444,8 +458,10 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         metadata["script_deadband"] = float(args.script_deadband)
         if args.policy == "manipulate":
             metadata["script_num_waypoints"] = int(args.script_num_waypoints)
-        if args.policy == "configure":
+        if args.policy in ("configure", "route_u"):
             metadata["acceptance_policy"] = "final_normalized_performance"
+        if args.policy == "route_u":
+            metadata["task_description"] = "u_shaped_cable_routing"
 
     pixels_arr = np.asarray(pixel_frames, dtype=np.uint8)
     action_arr = np.asarray(actions, dtype=np.float32)
@@ -518,7 +534,9 @@ def main():
                 max_attempts = max(1, int(args.max_attempts_per_episode))
 
             for attempt_idx in range(max_attempts):
-                arrays, metadata = collect_episode(env, args, episode_idx, env_kwargs)
+                arrays, metadata = collect_episode(
+                    env, args, episode_idx, env_kwargs, attempt_idx=attempt_idx
+                )
                 final_perf = None
                 if "info_normalized_performance" in arrays:
                     vals = np.asarray(arrays["info_normalized_performance"], dtype=np.float32)
@@ -533,8 +551,26 @@ def main():
 
                 if args.min_final_normalized_performance is None:
                     break
-                if final_perf is not None and final_perf >= args.min_final_normalized_performance:
+                recorded_horizon = int(arrays["action"].shape[0])
+                long_enough = recorded_horizon >= int(args.min_recorded_horizon_for_acceptance)
+                if (
+                    final_perf is not None
+                    and final_perf >= args.min_final_normalized_performance
+                    and long_enough
+                ):
                     break
+                if final_perf is not None and not long_enough:
+                    print(
+                        "rejected episode {} attempt {} final_norm_perf={:.4f} "
+                        "recorded_horizon={} < min_recorded_horizon={}".format(
+                            episode_idx,
+                            attempt_idx,
+                            final_perf,
+                            recorded_horizon,
+                            args.min_recorded_horizon_for_acceptance,
+                        )
+                    )
+                    continue
                 print(
                     "rejected episode {} attempt {} final_norm_perf={}".format(
                         episode_idx,

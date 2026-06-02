@@ -1036,6 +1036,172 @@ class TraceRopeConfigurationPolicy(object):
         self.phase_step = 0
 
 
+class RouteURopeConfigurationPolicy(GoalRopeConfigurationPolicy):
+    """Closed-loop macro planner for the practical U-shaped cable-routing task.
+
+    The generic RopeConfiguration oracle chases whichever keypoints are worst,
+    which often gives decent scalar reward while producing visually messy U
+    shapes. This policy keeps the task scoped to cable routing: form the bottom
+    of the U first, then pull the two arms upward. At each macro decision it
+    simulates several two-keypoint pick/place candidates and executes only the
+    best first macro, then replans from the new simulator state.
+    """
+
+    def __init__(self, env, action_space, num_picker=2, action_gain=1.0,
+                 max_speed_scale=1.0, deadband=1e-5, lift_height=0.08,
+                 place_height=0.052, settle_steps=2, rng=None,
+                 action_repeat=8):
+        GoalRopeConfigurationPolicy.__init__(
+            self,
+            env=env,
+            action_space=action_space,
+            num_picker=num_picker,
+            action_gain=action_gain,
+            max_speed_scale=max_speed_scale,
+            deadband=deadband,
+            lift_height=lift_height,
+            place_height=place_height,
+            settle_steps=settle_steps,
+            rng=rng,
+            action_repeat=action_repeat,
+        )
+        self.solve_threshold = 0.60
+        self.greedy_top_k = 10
+        self.stage_idx = 0
+        self.route_stages = [(4, 5), (3, 6), (2, 7), (1, 8), (0, 9)]
+        self.stage_error_threshold = 0.035
+
+    def reset(self):
+        GoalRopeConfigurationPolicy.reset(self)
+        self.stage_idx = 0
+        goal_char = str(self.env.current_config.get("goal_character", ""))
+        if goal_char != "U":
+            raise RuntimeError("route_u policy requires RopeConfiguration goal U")
+
+    def _assignment(self):
+        self._maybe_advance_stage()
+        pos = self._particle_positions()
+        kp = self._keypoint_indices()
+        cur = pos[kp]
+        goal = np.asarray(self.env.current_config["goal_character_pos"], dtype=np.float32)[:, :3]
+        goal_kp = goal[kp]
+        pairs = []
+        for i in range(len(kp)):
+            dist = float(np.linalg.norm(cur[i] - goal_kp[i]))
+            pairs.append((dist, int(i), int(i), int(kp[i]), goal_kp[i].copy()))
+        pairs.sort(reverse=True, key=lambda x: x[0])
+        return pairs
+
+    def _maybe_advance_stage(self):
+        while self.stage_idx < len(self.route_stages) - 1:
+            err = self._stage_error(self.stage_idx)
+            if err > self.stage_error_threshold:
+                break
+            self.stage_idx += 1
+
+    def _stage_error(self, stage_idx):
+        pos = self._particle_positions()
+        kp = self._keypoint_indices()
+        goal = np.asarray(self.env.current_config["goal_character_pos"], dtype=np.float32)[:, :3]
+        goal_kp = goal[kp]
+        indices = self.route_stages[min(stage_idx, len(self.route_stages) - 1)]
+        errs = [np.linalg.norm(pos[kp[i]] - goal_kp[i]) for i in indices if i < len(kp)]
+        if not errs:
+            return 0.0
+        return float(np.mean(errs))
+
+    def _choose_greedy_pair(self, pairs):
+        by_local = {item[1]: item for item in pairs}
+        candidate_items = []
+
+        # Prioritize the current U-routing stage and its immediate neighbors.
+        for si in (self.stage_idx, self.stage_idx + 1, self.stage_idx - 1):
+            if si < 0 or si >= len(self.route_stages):
+                continue
+            for local_idx in self.route_stages[si]:
+                if local_idx in by_local and by_local[local_idx] not in candidate_items:
+                    candidate_items.append(by_local[local_idx])
+
+        # Add the globally worst keypoints so the planner can recover if a
+        # previous macro disturbed an already-shaped part of the cable.
+        for item in pairs:
+            if item not in candidate_items:
+                candidate_items.append(item)
+            if len(candidate_items) >= self.greedy_top_k:
+                break
+
+        candidates = []
+        for i in range(len(candidate_items)):
+            for j in range(i + 1, len(candidate_items)):
+                candidates.append([candidate_items[i], candidate_items[j]])
+        if not candidates:
+            return pairs[:self.num_picker]
+
+        best = None
+        best_score = -1e9
+        for cand in candidates:
+            score = self._score_candidate(cand)
+            if score > best_score:
+                best_score = score
+                best = cand
+        return best if best is not None else pairs[:self.num_picker]
+
+    def _score_candidate(self, cand):
+        state = self.env.get_state()
+        picked = list(getattr(self.env.action_tool, "picked_particles", [None] * self.num_picker))
+        time_step = getattr(self.env, "time_step", 0)
+        try:
+            particle_indices = [item[3] for item in cand[:self.num_picker]]
+            goals = np.stack([item[4] for item in cand[:self.num_picker]], axis=0)
+            grip0 = np.zeros(self.num_picker, dtype=np.float32)
+            grip1 = np.ones(self.num_picker, dtype=np.float32)
+
+            pos = self._particle_positions()
+            targets = np.zeros((self.num_picker, 3), dtype=np.float32)
+            for i, particle_idx in enumerate(particle_indices):
+                targets[i] = pos[particle_idx]
+                targets[i, 1] += self.lift_height
+            self._step_no_render(self._action_toward(targets, grip0))
+
+            pos = self._particle_positions()
+            for i, particle_idx in enumerate(particle_indices):
+                targets[i] = pos[particle_idx]
+                targets[i, 1] += 0.005
+            self._step_no_render(self._action_toward(targets, grip0))
+            self._step_no_render(self._action_toward(_picker_xyz(self.num_picker), grip1))
+
+            targets = _picker_xyz(self.num_picker).copy()
+            targets[:, 1] += self.lift_height
+            self._step_no_render(self._action_toward(targets, grip1))
+
+            targets = goals.copy()
+            targets[:, 1] = np.maximum(targets[:, 1], self.place_height + self.lift_height)
+            self._step_no_render(self._action_toward(targets, grip1))
+
+            targets = goals.copy()
+            targets[:, 1] = self.place_height
+            self._step_no_render(self._action_toward(targets, grip1))
+            self._step_no_render(self._action_toward(_picker_xyz(self.num_picker), grip0))
+
+            info = self.env._get_info()
+            perf = float(info.get("normalized_performance", info.get("performance", -1e9)))
+            ordered_error = self._ordered_keypoint_error()
+            stage_error = self._stage_error(self.stage_idx)
+            return perf - 2.0 * ordered_error - 1.0 * stage_error
+        finally:
+            self.env.set_state(state)
+            self.env.action_tool.picked_particles = picked
+            self.env.time_step = time_step
+
+    def _ordered_keypoint_error(self):
+        pos = self._particle_positions()
+        kp = self._keypoint_indices()
+        cur = pos[kp]
+        goal = np.asarray(self.env.current_config["goal_character_pos"], dtype=np.float32)[:, :3]
+        goal_kp = goal[kp]
+        return float(np.mean(np.linalg.norm(cur - goal_kp, axis=1)))
+
+
 class HybridRopeConfigurationPolicy(object):
     """Choose the strongest available RopeConfiguration oracle by goal letter."""
 
@@ -1102,6 +1268,7 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
       "manipulate"  -> SmoothRopeManipulationPolicy (random middle particles,
                        smooth waypoint walk; creates diverse rope configs).
       "configure"   -> goal-conditioned RopeConfiguration oracle.
+      "route_u"     -> U-shaped cable-routing RopeConfiguration expert.
     """
     if env_name not in ("RopeFlatten", "RopeConfiguration"):
         raise NotImplementedError(
@@ -1146,6 +1313,20 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
             num_picker=num_picker,
             action_gain=max(action_gain, 1.0),
             max_speed_scale=max(max_speed_scale, 1.0),
+            deadband=min(deadband, 1e-5),
+            lift_height=max(lift_height, 0.08),
+            rng=rng,
+            action_repeat=getattr(env, "action_repeat", 8),
+        )
+    if kind == "route_u":
+        if env_name != "RopeConfiguration":
+            raise NotImplementedError("route_u policy is only for RopeConfiguration")
+        return RouteURopeConfigurationPolicy(
+            env=env,
+            action_space=env.action_space,
+            num_picker=num_picker,
+            action_gain=max(action_gain, 0.8),
+            max_speed_scale=max(max_speed_scale, 0.8),
             deadband=min(deadband, 1e-5),
             lift_height=max(lift_height, 0.08),
             rng=rng,

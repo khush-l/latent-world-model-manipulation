@@ -31,6 +31,7 @@ POLICY_ID_MAP = {
     "cem_expert": 2,
     "perturbation": 3,
     "configure": 4,
+    "route_u": 5,
 }
 
 

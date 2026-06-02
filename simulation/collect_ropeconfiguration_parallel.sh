@@ -11,13 +11,16 @@
 #   TOTAL_EPISODES  total episodes, default 5000
 #   SHARDS          shard count, default 10
 #   MAX_PAR         max concurrent collectors/converters, default 2
-#   POLICY          configure, manipulate, or push, default configure
+#   POLICY          route_u, configure, manipulate, or push, default configure
 #   SCRIPT_NOISE_SCALE low-level action perturbation, default 0.0 for clean data
-#   HORIZON         maximum episode length, default 200 for configure
-#   MIN_FINAL_NORMALIZED_PERFORMANCE acceptance threshold, default 0.60 for configure
+#   HORIZON         maximum episode length, default 300 for route_u, 200 for configure
+#   MIN_FINAL_NORMALIZED_PERFORMANCE acceptance threshold, default 0.60 for route_u,
+#                   0.60 for configure
 #   STOP_ON_NORMALIZED_PERFORMANCE early-stop threshold, default same as MIN_FINAL...
 #   MAX_ATTEMPTS_PER_EPISODE retries for accepted data, default 50
-#   GOALS           balanced goals for configure, default "S O M C U"
+#   MIN_RECORDED_HORIZON_FOR_ACCEPTANCE reject accepted route_u clips shorter
+#                   than this many actions, default 20 for route_u
+#   GOALS           balanced goals for configure, default "S O M C U"; route_u is U-only
 #   GOAL_CHARACTER  force every shard to one goal, overrides GOALS
 #   MIN_VARIATIONS_PER_SHARD minimum cached configs for forced-goal shards, default 50
 #   IMG             image size, default 128
@@ -39,21 +42,38 @@ TOTAL_EPISODES=${TOTAL_EPISODES:-5000}
 SHARDS=${SHARDS:-10}
 MAX_PAR=${MAX_PAR:-2}
 IMG=${IMG:-128}
-if [[ "$POLICY" == "configure" ]]; then
+if [[ "$POLICY" == "route_u" ]]; then
+  HORIZON=${HORIZON:-300}
+elif [[ "$POLICY" == "configure" ]]; then
   HORIZON=${HORIZON:-200}
 else
   HORIZON=${HORIZON:-}
 fi
-if [[ "$POLICY" == "configure" ]]; then
+if [[ "$POLICY" == "route_u" ]]; then
+  MIN_FINAL_NORMALIZED_PERFORMANCE=${MIN_FINAL_NORMALIZED_PERFORMANCE:-0.60}
+elif [[ "$POLICY" == "configure" ]]; then
   MIN_FINAL_NORMALIZED_PERFORMANCE=${MIN_FINAL_NORMALIZED_PERFORMANCE:-0.60}
 else
   MIN_FINAL_NORMALIZED_PERFORMANCE=${MIN_FINAL_NORMALIZED_PERFORMANCE:-}
 fi
 STOP_ON_NORMALIZED_PERFORMANCE=${STOP_ON_NORMALIZED_PERFORMANCE:-$MIN_FINAL_NORMALIZED_PERFORMANCE}
 MAX_ATTEMPTS_PER_EPISODE=${MAX_ATTEMPTS_PER_EPISODE:-50}
+if [[ "$POLICY" == "route_u" ]]; then
+  MIN_RECORDED_HORIZON_FOR_ACCEPTANCE=${MIN_RECORDED_HORIZON_FOR_ACCEPTANCE:-20}
+else
+  MIN_RECORDED_HORIZON_FOR_ACCEPTANCE=${MIN_RECORDED_HORIZON_FOR_ACCEPTANCE:-0}
+fi
 GOALS=${GOALS:-"S O M C U"}
-GOAL_CHARACTER=${GOAL_CHARACTER:-}
-MIN_VARIATIONS_PER_SHARD=${MIN_VARIATIONS_PER_SHARD:-50}
+if [[ "$POLICY" == "route_u" ]]; then
+  GOAL_CHARACTER=${GOAL_CHARACTER:-U}
+else
+  GOAL_CHARACTER=${GOAL_CHARACTER:-}
+fi
+if [[ "$POLICY" == "route_u" ]]; then
+  MIN_VARIATIONS_PER_SHARD=${MIN_VARIATIONS_PER_SHARD:-150}
+else
+  MIN_VARIATIONS_PER_SHARD=${MIN_VARIATIONS_PER_SHARD:-50}
+fi
 DATA=${DATA:-simulation/data/ropeconfiguration_${POLICY}_${TOTAL_EPISODES}}
 OUT_H5=${OUT_H5:-${DATA}.h5}
 LOGS=$DATA/logs
@@ -70,6 +90,7 @@ mkdir -p "$LOGS" "$DATA" "$(dirname "$OUT_H5")"
 echo "=== RopeConfiguration collection ==="
 echo "policy=$POLICY total=$TOTAL_EPISODES shards=$SHARDS shard_size=$SHARD_SIZE max_par=$MAX_PAR img=$IMG horizon=${HORIZON:-env-default} script_noise_scale=$SCRIPT_NOISE_SCALE"
 echo "min_final_normalized_performance=${MIN_FINAL_NORMALIZED_PERFORMANCE:-none} max_attempts=$MAX_ATTEMPTS_PER_EPISODE"
+echo "min_recorded_horizon_for_acceptance=$MIN_RECORDED_HORIZON_FOR_ACCEPTANCE"
 echo "stop_on_normalized_performance=${STOP_ON_NORMALIZED_PERFORMANCE:-none}"
 echo "goals=${GOAL_CHARACTER:-$GOALS}"
 echo "data=$DATA"
@@ -100,6 +121,7 @@ collect_shard() {
   if [[ -n "$MIN_FINAL_NORMALIZED_PERFORMANCE" ]]; then
     accept_args+=(--min-final-normalized-performance "$MIN_FINAL_NORMALIZED_PERFORMANCE")
     accept_args+=(--max-attempts-per-episode "$MAX_ATTEMPTS_PER_EPISODE")
+    accept_args+=(--min-recorded-horizon-for-acceptance "$MIN_RECORDED_HORIZON_FOR_ACCEPTANCE")
   fi
   if [[ -n "$STOP_ON_NORMALIZED_PERFORMANCE" ]]; then
     accept_args+=(--stop-on-normalized-performance "$STOP_ON_NORMALIZED_PERFORMANCE")
