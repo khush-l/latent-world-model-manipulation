@@ -57,6 +57,12 @@ def parse_args():
     parser.add_argument("--use-cached-states", action="store_true")
     parser.add_argument("--save-cached-states", action="store_true")
     parser.add_argument("--eval-split", action="store_true")
+    parser.add_argument(
+        "--goal-character",
+        choices=("S", "O", "M", "C", "U"),
+        default=None,
+        help="For RopeConfiguration, force resets to this target character.",
+    )
     parser.add_argument("--save-depth", action="store_true")
     parser.add_argument(
         "--save-full-state",
@@ -68,14 +74,16 @@ def parse_args():
     parser.add_argument("--no-compress", action="store_true")
     parser.add_argument(
         "--policy",
-        choices=("random", "geometric", "manipulate", "push"),
+        choices=("random", "geometric", "manipulate", "push", "configure"),
         default="random",
         help="Behavior policy. 'random' = uniform sample over action space. "
              "'geometric' = scripted state-machine policy (currently only "
              "RopeFlatten — grabs endpoints and stretches). "
              "'manipulate' = scripted free-form policy that grabs random "
              "middle rope particles and walks them through smooth waypoints "
-             "(creates diverse rope configurations instead of always flat).",
+             "(creates diverse rope configurations instead of always flat). "
+             "'configure' = goal-conditioned RopeConfiguration oracle that "
+             "moves keypoints toward the target character.",
     )
     parser.add_argument(
         "--script-num-waypoints",
@@ -127,6 +135,27 @@ def parse_args():
         help="Per-axis commanded-delta deadband (meters/substep). Any |delta| "
              "below this is zeroed — eliminates proportional-control jitter "
              "during HOLD/GRIP phases where the picker should be stationary.",
+    )
+    parser.add_argument(
+        "--min-final-normalized-performance",
+        type=float,
+        default=None,
+        help="If set, only save episodes whose final info_normalized_performance "
+             "is at least this value. Failed attempts are retried.",
+    )
+    parser.add_argument(
+        "--stop-on-normalized-performance",
+        type=float,
+        default=None,
+        help="If set, stop recording the episode as soon as "
+             "info_normalized_performance reaches this value.",
+    )
+    parser.add_argument(
+        "--max-attempts-per-episode",
+        type=int,
+        default=20,
+        help="Maximum attempts for each saved episode when an acceptance "
+             "threshold is set.",
     )
     return parser.parse_args()
 
@@ -292,8 +321,23 @@ def append_info(info_buffers, info):
         info_buffers.setdefault(key, []).append(value)
 
 
+def reset_env(env, args):
+    if args.goal_character is None:
+        return env.reset()
+    if args.env_name != "RopeConfiguration":
+        raise ValueError("--goal-character is only valid for RopeConfiguration")
+    candidates = [
+        i for i, cfg in enumerate(getattr(env, "cached_configs", []) or [])
+        if str(cfg.get("goal_character", "")) == args.goal_character
+    ]
+    if not candidates:
+        raise RuntimeError("no cached RopeConfiguration configs for goal %s" % args.goal_character)
+    config_id = int(np.random.choice(candidates))
+    return env.reset(config_id=config_id)
+
+
 def collect_episode(env, args, episode_idx, env_kwargs):
-    obs = env.reset()
+    obs = reset_env(env, args)
     del obs
 
     num_picker = int(env_kwargs.get("num_picker", getattr(env.action_tool, "num_picker", 2)))
@@ -320,7 +364,7 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         append_state(full_state_buffers, extract_state_arrays(env))
 
     policy_obj = None
-    if args.policy in ("geometric", "manipulate", "push"):
+    if args.policy in ("geometric", "manipulate", "push", "configure"):
         from geometric_policy import make_policy
         policy_obj = make_policy(
             env_name=args.env_name,
@@ -359,6 +403,12 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         if args.save_full_state:
             append_state(full_state_buffers, extract_state_arrays(env))
 
+        if args.stop_on_normalized_performance is not None:
+            perf = scalar_info(info).get("normalized_performance")
+            if perf is not None and perf >= args.stop_on_normalized_performance:
+                done = True
+                dones[-1] = True
+
         if done:
             break
 
@@ -377,13 +427,14 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         "action_space_high": to_jsonable(env.action_space.high),
         "action_repeat": int(env.action_repeat),
         "horizon": int(env.horizon),
+        "recorded_horizon": int(len(actions)),
         "img_size": int(args.img_size),
         "num_picker": int(num_picker),
         "action_dim": int(action_dim),
         "proprio_dim": int(proprio_dim),
         "state_dim": int(STATE_DIM),
     }
-    if args.policy in ("geometric", "manipulate", "push"):
+    if args.policy in ("geometric", "manipulate", "push", "configure"):
         metadata["behavior_policy"] = "rope_" + args.policy
         metadata["script_noise_scale"] = float(args.script_noise_scale)
         metadata["script_lateral_scale"] = float(args.script_lateral_scale)
@@ -393,6 +444,8 @@ def collect_episode(env, args, episode_idx, env_kwargs):
         metadata["script_deadband"] = float(args.script_deadband)
         if args.policy == "manipulate":
             metadata["script_num_waypoints"] = int(args.script_num_waypoints)
+        if args.policy == "configure":
+            metadata["acceptance_policy"] = "final_normalized_performance"
 
     pixels_arr = np.asarray(pixel_frames, dtype=np.uint8)
     action_arr = np.asarray(actions, dtype=np.float32)
@@ -460,7 +513,44 @@ def main():
 
     try:
         for episode_idx in range(args.num_episodes):
-            arrays, metadata = collect_episode(env, args, episode_idx, env_kwargs)
+            max_attempts = 1
+            if args.min_final_normalized_performance is not None:
+                max_attempts = max(1, int(args.max_attempts_per_episode))
+
+            for attempt_idx in range(max_attempts):
+                arrays, metadata = collect_episode(env, args, episode_idx, env_kwargs)
+                final_perf = None
+                if "info_normalized_performance" in arrays:
+                    vals = np.asarray(arrays["info_normalized_performance"], dtype=np.float32)
+                    finite = vals[np.isfinite(vals)]
+                    if finite.size:
+                        final_perf = float(finite[-1])
+                metadata["attempt_idx"] = int(attempt_idx)
+                metadata["accepted_final_normalized_performance"] = (
+                    None if final_perf is None else float(final_perf)
+                )
+                arrays["metadata_json"] = np.asarray(json.dumps(metadata, sort_keys=True))
+
+                if args.min_final_normalized_performance is None:
+                    break
+                if final_perf is not None and final_perf >= args.min_final_normalized_performance:
+                    break
+                print(
+                    "rejected episode {} attempt {} final_norm_perf={}".format(
+                        episode_idx,
+                        attempt_idx,
+                        "None" if final_perf is None else "{:.4f}".format(final_perf),
+                    )
+                )
+            else:
+                raise RuntimeError(
+                    "episode {} failed acceptance threshold {} after {} attempts".format(
+                        episode_idx,
+                        args.min_final_normalized_performance,
+                        max_attempts,
+                    )
+                )
+
             path = save_episode(
                 output_dir,
                 args.env_name,

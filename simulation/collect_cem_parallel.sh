@@ -26,7 +26,8 @@
 #   MAX_ITERS       CEM iterations               (default 5)
 #   TPD             timestep_per_decision        (default 2400; pop=TPD/iters/horizon)
 #   IMG             image size                   (default 128)
-#   OUT_H5          merged dataset               (default simulation/data/rope/rope_cem_dataset.h5)
+#   ENV_NAME        SoftGym task                 (default RopeFlatten)
+#   OUT_H5          merged dataset               (default simulation/data/<env>_cem/<env>_cem_dataset.h5)
 #   SMOKE=1         tiny run (2 shards x 2 eps)  to validate the orchestration end-to-end
 #
 # Usage (on the big CPU box, after syncing the repo + building both images):
@@ -38,10 +39,12 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 cd "$REPO_ROOT"
 
-PY=.venv/bin/python
+PY=${PY:-.venv/bin/python}
 SOFTAGENT=simulation/docker/softagent-local.sh
 SOFTGYM=simulation/docker/softgym-local.sh
 
+ENV_NAME=${ENV_NAME:-RopeFlatten}
+ENV_SLUG=$(echo "$ENV_NAME" | tr '[:upper:]' '[:lower:]')
 TOTAL_EPISODES=${TOTAL_EPISODES:-2000}
 SHARDS=${SHARDS:-200}              # small shards (10 eps) -> incremental, interrupt-safe
 MAX_PAR=${MAX_PAR:-12}             # concurrent shards; MAX_PAR*8 <= vCPUs (126 -> <=15)
@@ -49,8 +52,7 @@ NUM_GPUS=${NUM_GPUS:-4}            # round-robin shards across GPUs (avoid pilin
 MAX_ITERS=${MAX_ITERS:-3}          # slim CEM (validated: 0.998, ~2x faster than iters=5)
 TPD=${TPD:-900}                    # population = TPD/MAX_ITERS/plan_horizon(15)
 IMG=${IMG:-128}
-OUT_H5=${OUT_H5:-simulation/data/rope/rope_cem_dataset.h5}
-ENV_NAME=RopeFlatten
+OUT_H5=${OUT_H5:-simulation/data/${ENV_SLUG}_cem/${ENV_SLUG}_cem_dataset.h5}
 if [[ "${SMOKE:-0}" == "1" ]]; then TOTAL_EPISODES=4; SHARDS=2; MAX_PAR=2; fi
 
 EP_PER_SHARD=$(( (TOTAL_EPISODES + SHARDS - 1) / SHARDS ))
@@ -58,12 +60,12 @@ EP_PER_SHARD=$(( (TOTAL_EPISODES + SHARDS - 1) / SHARDS ))
 # workdir = simulation/ (both mount simulation/). So CEM writes cem_traj.pkl under
 # simulation/softagent/$CEM_BASE; the softgym replay container reads it as
 # softagent/$CEM_BASE (relative to simulation/), and writes npz under $NPZ_BASE.
-CEM_BASE=data/cem_shards          # relative to softagent workdir (simulation/softagent/)
-NPZ_BASE=data/rope_cem            # relative to softgym  workdir (simulation/)
-LOGS=simulation/data/rope_cem/logs
+CEM_BASE=data/${ENV_SLUG}_cem_shards   # relative to softagent workdir (simulation/softagent/)
+NPZ_BASE=data/${ENV_SLUG}_cem          # relative to softgym  workdir (simulation/)
+LOGS=simulation/data/${ENV_SLUG}_cem/logs
 mkdir -p "$LOGS" simulation/"$NPZ_BASE" simulation/softagent/"$CEM_BASE" "$(dirname "$OUT_H5")"
 
-echo "=== CEM expert collection ==="
+echo "=== CEM expert collection ($ENV_NAME) ==="
 echo "total=$TOTAL_EPISODES shards=$SHARDS ep/shard=$EP_PER_SHARD max_par=$MAX_PAR num_gpus=$NUM_GPUS"
 echo "CEM: max_iters=$MAX_ITERS tpd=$TPD (pop=$((TPD/MAX_ITERS/15)))  out=$OUT_H5"
 echo "  -> ~$((MAX_PAR/NUM_GPUS>0?MAX_PAR/NUM_GPUS:1)) shards/GPU = ~$(((MAX_PAR/NUM_GPUS>0?MAX_PAR/NUM_GPUS:1)*8)) FleX envs/GPU"

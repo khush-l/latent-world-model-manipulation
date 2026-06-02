@@ -36,7 +36,7 @@ if SIM_ROOT not in sys.path:
 from softgym.registered_env import SOFTGYM_ENVS, env_arg_dict  # noqa: E402
 from utils.collect_trajectories import (  # noqa: E402
     render_rgb_depth, extract_proprio, extract_compact_state,
-    SCHEMA_VERSION, STATE_DIM,
+    SCHEMA_VERSION, STATE_DIM, to_jsonable,
 )
 
 
@@ -107,15 +107,19 @@ def main():
         T = len(actions_raw)
         metadata = {
             "schema_version": SCHEMA_VERSION, "env_name": args.env_name,
-            "episode_idx": ep_idx, "policy": "cem",
-            "behavior_policy": "rope_cem_oracle",
+            "episode_idx": ep_idx, "policy": "cem_expert",
+            "behavior_policy": "%s_cem_oracle" % args.env_name.lower(),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "env_kwargs": to_jsonable(kwargs),
+            "config_id": 0,
+            "current_config": to_jsonable(env.get_current_config()),
             "action_space_low": lb.tolist(), "action_space_high": ub.tolist(),
             "action_repeat": int(getattr(env, "action_repeat", 8)),
             "horizon": int(getattr(env, "horizon", T)), "img_size": int(args.img_size),
             "num_picker": int(num_picker), "action_dim": int(lb.shape[0]),
             "proprio_dim": int(4 * num_picker), "state_dim": int(STATE_DIM),
             "source_traj": os.path.abspath(args.traj),
+            "source_episode_idx": int(i),
         }
         arrays = {
             "pixels": np.asarray(pixels, dtype=np.uint8),

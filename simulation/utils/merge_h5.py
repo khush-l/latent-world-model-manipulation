@@ -98,7 +98,7 @@ def main():
     inputs = [_parse_input(s) for s in args.input]
     infos, total_rows, total_episodes, info_keys = _scan_sources(inputs)
 
-    print(f"merging {len(infos)} sources → {args.output}")
+    print(f"merging {len(infos)} sources -> {args.output}")
     for info in infos:
         print(f"  {info['label']:12s}  {info['n_episodes']:5d} eps  "
               f"{info['n_rows']:7d} rows  {info['path']}")
@@ -149,11 +149,12 @@ def main():
         for src_idx, info in enumerate(infos):
             f = info["file"]
             label = info["label"]
-            policy_id_for_source = src_idx  # 0=first, 1=second, ...
-            new_policy_map[label] = policy_id_for_source
+            if label not in new_policy_map:
+                new_policy_map[label] = len(new_policy_map)
+            policy_id_for_source = new_policy_map[label]
 
             n_rows = info["n_rows"]
-            print(f"\n→ copying {label} ({n_rows} rows) as policy_id={policy_id_for_source}")
+            print(f"\n-> copying {label} ({n_rows} rows) as policy_id={policy_id_for_source}")
 
             for chunk_start in range(0, n_rows, args.chunk_rows):
                 chunk_end = min(chunk_start + args.chunk_rows, n_rows)

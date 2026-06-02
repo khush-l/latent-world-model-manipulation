@@ -566,6 +566,531 @@ class PushRopePolicy(object):
         return action
 
 
+class GoalRopeConfigurationPolicy(object):
+    """Deterministic goal-conditioned RopeConfiguration policy.
+
+    The target character is stored as an ordered rope path. This policy
+    repeatedly picks the two currently worst ordered keypoints and drags them
+    to their corresponding target locations. It is an oracle data-collection
+    policy, not a deployable vision policy.
+    """
+
+    APPROACH = 0
+    DESCEND = 1
+    GRIP = 2
+    LIFT = 3
+    DRAG = 4
+    PLACE = 5
+    RELEASE = 6
+    SETTLE = 7
+
+    def __init__(self, env, action_space, num_picker=2, action_gain=1.0,
+                 max_speed_scale=1.0, deadband=1e-5, lift_height=0.08,
+                 place_height=0.055, settle_steps=1, rng=None,
+                 action_repeat=8):
+        assert num_picker == 2
+        self.env = env
+        self.action_space = action_space
+        self.num_picker = num_picker
+        self.action_gain = float(action_gain)
+        self.action_repeat = int(action_repeat)
+        self.deadband = float(deadband)
+        self.lift_height = float(lift_height)
+        self.place_height = float(place_height)
+        self.settle_steps = int(settle_steps)
+        self.rng = rng if rng is not None else np.random
+
+        self.delta_high = (max_speed_scale * action_space.high[:3]).astype(np.float32)
+        self.delta_low = (max_speed_scale * action_space.low[:3]).astype(np.float32)
+
+        self.phase = self.SETTLE
+        self.phase_step = 0
+        self.targets = None
+        self.grip = np.zeros(num_picker, dtype=np.float32)
+        self.pick_particle_indices = None
+        self.goal_targets = None
+        self.last_keypoint_indices = []
+        self.greedy_top_k = 6
+        self.solve_threshold = 0.95
+        self.solved = False
+
+    def reset(self):
+        self.phase = self.SETTLE
+        self.phase_step = 0
+        self.grip[:] = 0.0
+        self.targets = _picker_xyz(self.num_picker).copy()
+        self.pick_particle_indices = None
+        self.goal_targets = None
+        self.last_keypoint_indices = []
+        self.solved = False
+
+    def get_action(self):
+        picker_xyz = _picker_xyz(self.num_picker)
+        if not self.solved:
+            info = self.env._get_info()
+            perf = float(info.get("normalized_performance", info.get("performance", -1e9)))
+            if perf >= self.solve_threshold:
+                self.solved = True
+                self.targets = picker_xyz.copy()
+                picked = getattr(self.env.action_tool, "picked_particles", [None] * self.num_picker)
+                self.grip = np.array(
+                    [0.0 if picked[i] is None else 1.0 for i in range(self.num_picker)],
+                    dtype=np.float32,
+                )
+        if self.solved:
+            action = np.zeros(4 * self.num_picker, dtype=np.float32)
+            for i in range(self.num_picker):
+                action[4 * i + 3] = self.grip[i]
+            return action
+
+        if self.phase == self.SETTLE and self.phase_step >= self.settle_steps:
+            self._start_new_pick(picker_xyz)
+        elif self.phase in (self.APPROACH, self.DESCEND):
+            self._refresh_pick_targets(above=(self.phase == self.APPROACH))
+
+        deltas = np.zeros((self.num_picker, 3), dtype=np.float32)
+        for i in range(self.num_picker):
+            err = self.targets[i] - picker_xyz[i]
+            deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+
+        max_err = float(np.max(np.abs(self.targets - picker_xyz)))
+        target_reached = max_err < 0.006
+        phase_budget = {
+            self.SETTLE:   max(1, self.settle_steps),
+            self.APPROACH: 4,
+            self.DESCEND:  3,
+            self.GRIP:     1,
+            self.LIFT:     2,
+            self.DRAG:     5,
+            self.PLACE:    2,
+            self.RELEASE:  1,
+        }[self.phase]
+
+        if target_reached or self.phase_step >= phase_budget:
+            self._advance_phase(picker_xyz)
+            for i in range(self.num_picker):
+                err = self.targets[i] - picker_xyz[i]
+                deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+
+        cap = np.abs(self.targets[:, :3] - picker_xyz) / float(self.action_repeat)
+        deltas = np.clip(deltas, -cap, cap)
+        deltas = np.where(np.abs(deltas) < self.deadband, 0.0, deltas)
+
+        action = np.zeros(4 * self.num_picker, dtype=np.float32)
+        for i in range(self.num_picker):
+            action[4 * i:4 * i + 3] = deltas[i]
+            action[4 * i + 3] = self.grip[i]
+        self.phase_step += 1
+        return action
+
+    def _particle_positions(self):
+        return np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+
+    def _keypoint_indices(self):
+        if hasattr(self.env, "key_point_indices"):
+            return list(self.env.key_point_indices)
+        n = self._particle_positions().shape[0]
+        indices = [0]
+        interval = (n - 2) // 8
+        for i in range(1, 9):
+            indices.append(i * interval)
+        indices.append(n - 1)
+        return indices
+
+    def _assignment(self):
+        pos = self._particle_positions()
+        kp = self._keypoint_indices()
+        cur = pos[kp]
+        goal = np.asarray(self.env.current_config["goal_character_pos"], dtype=np.float32)[:, :3]
+        goal_kp = goal[kp]
+        pairs = []
+        for i in range(len(kp)):
+            dist = float(np.linalg.norm(cur[i] - goal_kp[i]))
+            pairs.append((dist, int(i), int(i), int(kp[i]), goal_kp[i].copy()))
+        pairs.sort(reverse=True, key=lambda x: x[0])
+        return pairs
+
+    def _start_new_pick(self, picker_xyz):
+        del picker_xyz
+        pairs = self._assignment()
+        selected = self._choose_greedy_pair(pairs)
+
+        self.pick_particle_indices = [item[3] for item in selected[:self.num_picker]]
+        self.goal_targets = np.stack([item[4] for item in selected[:self.num_picker]], axis=0)
+        self.last_keypoint_indices = [item[1] for item in selected[:self.num_picker]]
+        self._refresh_pick_targets(above=True)
+        self.grip[:] = 0.0
+        self.phase = self.APPROACH
+        self.phase_step = 0
+
+    def _choose_greedy_pair(self, pairs):
+        pool = []
+        for item in pairs:
+            if item[1] in self.last_keypoint_indices and len(pairs) > self.num_picker:
+                continue
+            pool.append(item)
+            if len(pool) >= self.greedy_top_k:
+                break
+        if len(pool) < self.num_picker:
+            pool = pairs[:max(self.num_picker, min(self.greedy_top_k, len(pairs)))]
+
+        candidates = []
+        for i in range(len(pool)):
+            for j in range(i + 1, len(pool)):
+                if abs(pool[i][1] - pool[j][1]) <= 1 and len(pool) > 3:
+                    continue
+                candidates.append([pool[i], pool[j]])
+        if not candidates and len(pool) >= self.num_picker:
+            candidates.append(pool[:self.num_picker])
+        if not candidates:
+            return pairs[:self.num_picker]
+
+        best = None
+        best_score = -1e9
+        for cand in candidates:
+            score = self._score_candidate(cand)
+            if score > best_score:
+                best_score = score
+                best = cand
+        return best if best is not None else pairs[:self.num_picker]
+
+    def _action_toward(self, targets, grip):
+        picker_xyz = _picker_xyz(self.num_picker)
+        deltas = np.zeros((self.num_picker, 3), dtype=np.float32)
+        for i in range(self.num_picker):
+            err = targets[i] - picker_xyz[i]
+            deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+        cap = np.abs(targets[:, :3] - picker_xyz) / float(self.action_repeat)
+        deltas = np.clip(deltas, -cap, cap)
+        deltas = np.where(np.abs(deltas) < self.deadband, 0.0, deltas)
+        action = np.zeros(4 * self.num_picker, dtype=np.float32)
+        for i in range(self.num_picker):
+            action[4 * i:4 * i + 3] = deltas[i]
+            action[4 * i + 3] = grip[i]
+        return action
+
+    def _step_no_render(self, action):
+        for _ in range(self.action_repeat):
+            self.env._step(action)
+
+    def _score_candidate(self, cand):
+        state = self.env.get_state()
+        picked = list(getattr(self.env.action_tool, "picked_particles", [None] * self.num_picker))
+        time_step = getattr(self.env, "time_step", 0)
+        try:
+            particle_indices = [item[3] for item in cand[:self.num_picker]]
+            goals = np.stack([item[4] for item in cand[:self.num_picker]], axis=0)
+            grip0 = np.zeros(self.num_picker, dtype=np.float32)
+            grip1 = np.ones(self.num_picker, dtype=np.float32)
+
+            pos = self._particle_positions()
+            targets = np.zeros((self.num_picker, 3), dtype=np.float32)
+            for i, particle_idx in enumerate(particle_indices):
+                targets[i] = pos[particle_idx]
+                targets[i, 1] += self.lift_height
+            self._step_no_render(self._action_toward(targets, grip0))
+
+            pos = self._particle_positions()
+            for i, particle_idx in enumerate(particle_indices):
+                targets[i] = pos[particle_idx]
+                targets[i, 1] += 0.005
+            self._step_no_render(self._action_toward(targets, grip0))
+            self._step_no_render(self._action_toward(_picker_xyz(self.num_picker), grip1))
+
+            targets = _picker_xyz(self.num_picker).copy()
+            targets[:, 1] += self.lift_height
+            self._step_no_render(self._action_toward(targets, grip1))
+
+            targets = goals.copy()
+            targets[:, 1] = np.maximum(targets[:, 1], self.place_height + self.lift_height)
+            self._step_no_render(self._action_toward(targets, grip1))
+
+            targets = goals.copy()
+            targets[:, 1] = self.place_height
+            self._step_no_render(self._action_toward(targets, grip1))
+            self._step_no_render(self._action_toward(_picker_xyz(self.num_picker), grip0))
+
+            info = self.env._get_info()
+            return float(info.get("normalized_performance", info.get("performance", -1e9)))
+        finally:
+            self.env.set_state(state)
+            self.env.action_tool.picked_particles = picked
+            self.env.time_step = time_step
+
+    def _refresh_pick_targets(self, above):
+        pos = self._particle_positions()
+        targets = np.zeros((self.num_picker, 3), dtype=np.float32)
+        for i, particle_idx in enumerate(self.pick_particle_indices):
+            targets[i] = pos[particle_idx]
+            targets[i, 1] += self.lift_height if above else 0.005
+        self.targets = targets
+
+    def _advance_phase(self, picker_xyz):
+        if self.phase == self.SETTLE:
+            self._start_new_pick(picker_xyz)
+        elif self.phase == self.APPROACH:
+            self._refresh_pick_targets(above=False)
+            self.phase = self.DESCEND
+        elif self.phase == self.DESCEND:
+            self.targets = picker_xyz.copy()
+            self.grip[:] = 1.0
+            self.phase = self.GRIP
+        elif self.phase == self.GRIP:
+            self.targets = picker_xyz.copy()
+            self.targets[:, 1] += self.lift_height
+            self.phase = self.LIFT
+        elif self.phase == self.LIFT:
+            self.targets = self.goal_targets.copy()
+            self.targets[:, 1] = np.maximum(self.targets[:, 1], self.place_height + self.lift_height)
+            self.phase = self.DRAG
+        elif self.phase == self.DRAG:
+            self.targets = self.goal_targets.copy()
+            self.targets[:, 1] = self.place_height
+            self.phase = self.PLACE
+        elif self.phase == self.PLACE:
+            self.targets = picker_xyz.copy()
+            self.grip[:] = 0.0
+            self.phase = self.RELEASE
+        elif self.phase == self.RELEASE:
+            self.targets = picker_xyz.copy()
+            self.targets[:, 1] = np.maximum(self.targets[:, 1], self.lift_height)
+            self.phase = self.SETTLE
+        self.phase_step = 0
+
+
+class TraceRopeConfigurationPolicy(object):
+    """Endpoint-tracing RopeConfiguration oracle.
+
+    Grips the two rope endpoints and traces the ordered target-character path
+    from both ends toward the middle. This uses simulator state for data
+    collection, but the recorded actions are ordinary picker deltas.
+    """
+
+    SETTLE, APPROACH, DESCEND, GRIP, TRACE, HOLD = range(6)
+
+    def __init__(self, env, action_space, num_picker=2, action_gain=1.0,
+                 max_speed_scale=1.0, deadband=1e-5, lift_height=0.08,
+                 trace_height=0.055, rng=None, action_repeat=8):
+        assert num_picker == 2
+        self.env = env
+        self.action_space = action_space
+        self.num_picker = num_picker
+        self.action_gain = float(action_gain)
+        self.action_repeat = int(action_repeat)
+        self.deadband = float(deadband)
+        self.lift_height = float(lift_height)
+        self.trace_height = float(trace_height)
+        self.rng = rng if rng is not None else np.random
+        self.delta_high = (max_speed_scale * action_space.high[:3]).astype(np.float32)
+        self.delta_low = (max_speed_scale * action_space.low[:3]).astype(np.float32)
+
+        self.phase = self.SETTLE
+        self.phase_step = 0
+        self.targets = None
+        self.grip = np.zeros(num_picker, dtype=np.float32)
+        self.path0 = None
+        self.path1 = None
+        self.path_idx = 0
+        self.solved = False
+        self.solve_threshold = 0.95
+
+    def reset(self):
+        self.phase = self.SETTLE
+        self.phase_step = 0
+        self.grip[:] = 0.0
+        self.targets = _picker_xyz(self.num_picker).copy()
+        self.path_idx = 0
+        self.solved = False
+        self._plan_paths()
+
+    def get_action(self):
+        picker_xyz = _picker_xyz(self.num_picker)
+        if not self.solved:
+            info = self.env._get_info()
+            perf = float(info.get("normalized_performance", info.get("performance", -1e9)))
+            if perf >= self.solve_threshold:
+                self.solved = True
+                self.phase = self.HOLD
+                self.targets = picker_xyz.copy()
+                picked = getattr(self.env.action_tool, "picked_particles", [None] * self.num_picker)
+                self.grip = np.array(
+                    [0.0 if picked[i] is None else 1.0 for i in range(self.num_picker)],
+                    dtype=np.float32,
+                )
+
+        if self.phase == self.SETTLE and self.phase_step >= 1:
+            self._enter_approach()
+        elif self.phase == self.APPROACH:
+            self._refresh_endpoint_targets(above=True)
+        elif self.phase == self.DESCEND:
+            self._refresh_endpoint_targets(above=False)
+        elif self.phase == self.TRACE:
+            self._set_trace_targets()
+
+        deltas = np.zeros((self.num_picker, 3), dtype=np.float32)
+        for i in range(self.num_picker):
+            err = self.targets[i] - picker_xyz[i]
+            deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+
+        max_err = float(np.max(np.abs(self.targets - picker_xyz)))
+        target_reached = max_err < 0.006
+        budget = {
+            self.SETTLE: 1,
+            self.APPROACH: 4,
+            self.DESCEND: 3,
+            self.GRIP: 1,
+            self.TRACE: 2,
+            self.HOLD: 1000,
+        }[self.phase]
+        if target_reached or self.phase_step >= budget:
+            self._advance_phase(picker_xyz)
+            for i in range(self.num_picker):
+                err = self.targets[i] - picker_xyz[i]
+                deltas[i] = np.clip(self.action_gain * err, self.delta_low, self.delta_high)
+
+        cap = np.abs(self.targets[:, :3] - picker_xyz) / float(self.action_repeat)
+        deltas = np.clip(deltas, -cap, cap)
+        deltas = np.where(np.abs(deltas) < self.deadband, 0.0, deltas)
+
+        action = np.zeros(4 * self.num_picker, dtype=np.float32)
+        for i in range(self.num_picker):
+            action[4 * i:4 * i + 3] = deltas[i]
+            action[4 * i + 3] = self.grip[i]
+        self.phase_step += 1
+        return action
+
+    def _particle_positions(self):
+        return np.array(pyflex.get_positions()).reshape(-1, 4)[:, :3].astype(np.float32)
+
+    def _plan_paths(self):
+        pos = self._particle_positions()
+        n = pos.shape[0]
+        goal = np.asarray(self.env.current_config["goal_character_pos"], dtype=np.float32)[:, :3]
+        idx = np.linspace(0, goal.shape[0] - 1, n).round().astype(np.int32)
+        goal = goal[idx].copy()
+        goal[:, 1] = self.trace_height
+
+        forward_cost = np.linalg.norm(pos[0] - goal[0]) + np.linalg.norm(pos[-1] - goal[-1])
+        reverse_cost = np.linalg.norm(pos[0] - goal[-1]) + np.linalg.norm(pos[-1] - goal[0])
+        if reverse_cost < forward_cost:
+            goal = goal[::-1].copy()
+
+        goal_char = str(self.env.current_config.get("goal_character", ""))
+        if goal_char == "C":
+            self.path0 = goal
+            self.path1 = np.repeat(goal[0][None], goal.shape[0], axis=0)
+            return
+
+        mid = n // 2
+        self.path0 = goal[:mid + 1]
+        self.path1 = goal[:mid - 1:-1]
+        steps = max(len(self.path0), len(self.path1))
+        if len(self.path0) < steps:
+            self.path0 = np.vstack(
+                [self.path0, np.repeat(self.path0[-1][None], steps - len(self.path0), axis=0)]
+            )
+        if len(self.path1) < steps:
+            self.path1 = np.vstack(
+                [self.path1, np.repeat(self.path1[-1][None], steps - len(self.path1), axis=0)]
+            )
+
+    def _enter_approach(self):
+        self._refresh_endpoint_targets(above=True)
+        self.phase = self.APPROACH
+        self.phase_step = 0
+        self.grip[:] = 0.0
+
+    def _refresh_endpoint_targets(self, above):
+        pos = self._particle_positions()
+        lift = self.lift_height if above else 0.005
+        self.targets = np.stack([pos[0].copy(), pos[-1].copy()], axis=0)
+        self.targets[:, 1] += lift
+
+    def _set_trace_targets(self):
+        idx = min(self.path_idx, len(self.path0) - 1)
+        self.targets = np.stack([self.path0[idx], self.path1[idx]], axis=0).astype(np.float32)
+
+    def _advance_phase(self, picker_xyz):
+        if self.phase == self.SETTLE:
+            self._enter_approach()
+        elif self.phase == self.APPROACH:
+            self._refresh_endpoint_targets(above=False)
+            self.phase = self.DESCEND
+        elif self.phase == self.DESCEND:
+            self.targets = picker_xyz.copy()
+            self.grip[:] = 1.0
+            self.phase = self.GRIP
+        elif self.phase == self.GRIP:
+            self.path_idx = 0
+            self._set_trace_targets()
+            self.phase = self.TRACE
+        elif self.phase == self.TRACE:
+            self.path_idx += 1
+            if self.path_idx >= len(self.path0):
+                self.targets = picker_xyz.copy()
+                self.phase = self.HOLD
+            else:
+                self._set_trace_targets()
+        else:
+            self.targets = picker_xyz.copy()
+        self.phase_step = 0
+
+
+class HybridRopeConfigurationPolicy(object):
+    """Choose the strongest available RopeConfiguration oracle by goal letter."""
+
+    def __init__(self, env, action_space, num_picker=2, action_gain=1.0,
+                 max_speed_scale=1.0, deadband=1e-5, lift_height=0.08,
+                 rng=None, action_repeat=8):
+        self.env = env
+        self.goal_policy = GoalRopeConfigurationPolicy(
+            env=env,
+            action_space=action_space,
+            num_picker=num_picker,
+            action_gain=action_gain,
+            max_speed_scale=max_speed_scale,
+            deadband=deadband,
+            lift_height=lift_height,
+            rng=rng,
+            action_repeat=action_repeat,
+        )
+        self.trace_policy = TraceRopeConfigurationPolicy(
+            env=env,
+            action_space=action_space,
+            num_picker=num_picker,
+            action_gain=action_gain,
+            max_speed_scale=max_speed_scale,
+            deadband=deadband,
+            lift_height=lift_height,
+            rng=rng,
+            action_repeat=action_repeat,
+        )
+        self.active = self.goal_policy
+        self.goal_char = ""
+        self.refine_after_trace = False
+
+    def reset(self):
+        self.goal_char = str(self.env.current_config.get("goal_character", ""))
+        self.refine_after_trace = False
+        if self.goal_char in ("C", "O"):
+            self.active = self.trace_policy
+            self.refine_after_trace = True
+        else:
+            self.active = self.goal_policy
+        self.active.reset()
+
+    def get_action(self):
+        if self.refine_after_trace and self.active is self.trace_policy:
+            if getattr(self.trace_policy, "phase", None) == self.trace_policy.HOLD:
+                info = self.env._get_info()
+                perf = float(info.get("normalized_performance", info.get("performance", -1e9)))
+                if perf < 0.60:
+                    self.goal_policy.reset()
+                    self.active = self.goal_policy
+                self.refine_after_trace = False
+        return self.active.get_action()
+
+
 # Factory used by collect_trajectories.py
 def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
                 lift_height=0.05, action_gain=0.3, max_speed_scale=0.35,
@@ -576,10 +1101,15 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
       "geometric"   -> GeometricRopeFlattenPolicy (grab endpoints, stretch).
       "manipulate"  -> SmoothRopeManipulationPolicy (random middle particles,
                        smooth waypoint walk; creates diverse rope configs).
+      "configure"   -> goal-conditioned RopeConfiguration oracle.
     """
-    if env_name != "RopeFlatten":
+    if env_name not in ("RopeFlatten", "RopeConfiguration"):
         raise NotImplementedError(
             "Scripted policy not implemented for env_name=%r (yet)" % env_name
+        )
+    if env_name != "RopeFlatten" and kind == "geometric":
+        raise NotImplementedError(
+            "geometric endpoint-stretch policy is only implemented for RopeFlatten"
         )
     if kind == "geometric":
         return GeometricRopeFlattenPolicy(
@@ -604,6 +1134,20 @@ def make_policy(env_name, env, num_picker, noise_scale=0.02, lateral_scale=1.0,
             deadband=deadband,
             lift_height=max(lift_height, 0.08),
             num_waypoints=num_waypoints,
+            rng=rng,
+            action_repeat=getattr(env, "action_repeat", 8),
+        )
+    if kind == "configure":
+        if env_name != "RopeConfiguration":
+            raise NotImplementedError("configure policy is only for RopeConfiguration")
+        return HybridRopeConfigurationPolicy(
+            env=env,
+            action_space=env.action_space,
+            num_picker=num_picker,
+            action_gain=max(action_gain, 1.0),
+            max_speed_scale=max(max_speed_scale, 1.0),
+            deadband=min(deadband, 1e-5),
+            lift_height=max(lift_height, 0.08),
             rng=rng,
             action_repeat=getattr(env, "action_repeat", 8),
         )

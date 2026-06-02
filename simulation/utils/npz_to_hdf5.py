@@ -30,6 +30,7 @@ POLICY_ID_MAP = {
     "scripted": 1,
     "cem_expert": 2,
     "perturbation": 3,
+    "configure": 4,
 }
 
 
