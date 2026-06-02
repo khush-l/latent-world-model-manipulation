@@ -82,7 +82,27 @@ def main():
     p.add_argument("--confine-2d", action="store_true",
                    help="Confine pickers to the ground plane (freeze vertical action dims).")
     p.add_argument("--grab-steps", type=int, default=0,
-                   help="Scripted descend+grip steps before MPC, to put pickers on the rope plane.")
+                   help="Scripted descend+grip steps before MPC (grabs at picker init = rope CENTER).")
+    p.add_argument("--grip-endpoints", action="store_true",
+                   help="'Cheat': run the geometric expert through APPROACH->DESCEND->GRIP so both "
+                        "pickers grip the rope ENDPOINTS, THEN hand off to MPC (grip held). Tests "
+                        "whether the model's dynamics can flatten once the grasp problem is removed.")
+    p.add_argument("--grip-steps-max", type=int, default=40,
+                   help="max scripted steps to reach the endpoint grip.")
+    p.add_argument("--subgoals", action="store_true",
+                   help="Target latent waypoints from the expert demo (crumpled->flat) "
+                        "instead of one fixed final goal: each replan aims at the waypoint "
+                        "--subgoal-lookahead steps past the one nearest the current latent.")
+    p.add_argument("--subgoal-lookahead", type=int, default=8,
+                   help="How many expert-demo steps ahead to place the active subgoal.")
+    p.add_argument("--subgoal-mode", choices=("time", "nearest"), default="time",
+                   help="time: index the waypoint by elapsed env-step (robust, no latent "
+                        "matching); nearest: nearest-latent waypoint (fragile in blurry "
+                        "intermediate latents).")
+    p.add_argument("--cost", choices=("mse", "tempdist"), default="mse",
+                   help="mse: terminal-latent MSE (LeWM). tempdist: learned temporal-distance "
+                        "cost-to-go (needs --tempdist-ckpt).")
+    p.add_argument("--tempdist-ckpt", default=None, help="path to a trained tempdist_head.pt")
     p.add_argument("--success-thresh", type=float, default=0.8)
     p.add_argument("--img-size", type=int, default=128)
     p.add_argument("--env-name", default="RopeFlatten")
@@ -98,9 +118,12 @@ def main():
     # LeWM reference ties receding_horizon to horizon (execute the full plan before
     # replanning); -1 resolves to that. Pass a smaller value to re-ground more often.
     recede = args.horizon if args.receding_horizon < 0 else args.receding_horizon
-    print(f"[plan] horizon={args.horizon} receding_horizon={recede} "
+    goal_mode = f"subgoals(lookahead={args.subgoal_lookahead})" if args.subgoals else "fixed-goal"
+    if args.grip_endpoints:
+        goal_mode += " +grip-endpoints(cheat)"
+    print(f"[plan] horizon={args.horizon} receding_horizon={recede} goal={goal_mode} cost={args.cost} "
           f"cem(samples={args.cem_samples}, iters={args.cem_iters}, topk={args.cem_topk}) "
-          f"{'[LeWM-matched]' if recede == args.horizon else ''}")
+          f"{'[LeWM-matched]' if recede == args.horizon and not args.subgoals else ''}")
 
     # --- model (proprio auto-detected from sibling config.json) ---
     cfg_path = Path(args.ckpt).parent / "config.json"
@@ -130,6 +153,15 @@ def main():
     cost = LeWMCost(model, ACTION_LOW, ACTION_HIGH, history_size=H,
                     action_mean=a_mean, action_std=a_std,
                     proprio_mean=p_mean, proprio_std=p_std, device=device)
+    if args.cost == "tempdist":
+        if not args.tempdist_ckpt:
+            raise SystemExit("--cost tempdist requires --tempdist-ckpt")
+        from train_temporal_distance import DistanceHead   # training/ is on sys.path
+        td = torch.load(args.tempdist_ckpt, map_location=device, weights_only=False)
+        head = DistanceHead(td["dim"], hidden=td["hidden"])
+        head.load_state_dict(td["head_state_dict"])
+        cost.set_tempdist_head(head)
+        print(f"  [cost] temporal-distance head from {args.tempdist_ckpt} (K={td['K']})")
     # --confine-2d: pin each picker's vertical delta (action dims 1 & 5, the
     # y/up axis) to raw 0 so the pickers only slide in the ground plane. The
     # frozen value is raw-0 expressed in the solver's normalized space.
@@ -158,6 +190,13 @@ def main():
             obs = env.reset(config_id=cfg_id, seed=args.seed + i)
             start_perf = float(obs["info"].get("normalized_performance",
                                                obs["info"].get("performance", 0.0)))
+            # 'cheat': grip the rope endpoints with the scripted expert, then let
+            # MPC take over from the gripped state (grip is forced held below).
+            if args.grip_endpoints:
+                obs = env.grip_endpoints(max_steps=args.grip_steps_max)
+                start_perf = float(obs["info"].get("normalized_performance", start_perf))
+                print(f"    [grip-endpoints] hold={obs.get('hold')} after {obs.get('grip_steps')} steps "
+                      f"start_perf={start_perf:.3f}")
             # fixed flat goal = expert reference's FLATTEST frame (argmax perf),
             # not its last frame (the scripted expert often drifts after peaking).
             ref_frames, ref_perfs = env.make_goal_trajectory(n_steps=args.eval_budget, seed=1000 + cfg_id)
@@ -166,6 +205,15 @@ def main():
             goal_idx = min(goal_idx, len(ref_frames) - 1)
             goal_chw = torch.from_numpy(_to_imagenet_float(ref_frames[goal_idx])).float()
             cost.set_goal(goal_chw)
+
+            # Latent subgoals: encode the expert demo (start state .. flattest
+            # frame) into a waypoint path; each replan re-targets the waypoint
+            # `--subgoal-lookahead` ahead of the nearest one (set below).
+            sg_min_idx = 0
+            if args.subgoals:
+                wp = torch.stack([torch.from_numpy(_to_imagenet_float(f)).float()
+                                  for f in ref_frames[:goal_idx + 1]])
+                cost.set_waypoints(wp)
 
             # history buffers (length H frames/proprio; H-1 past actions)
             px0 = torch.from_numpy(_to_imagenet_float(obs["pixels"])).float()
@@ -212,6 +260,17 @@ def main():
                             info["start_proprio"] = prop_hist[-1].unsqueeze(0).to(device)
                             info["hist_proprio_norm"] = cost._norm_proprio(
                                 torch.stack(list(prop_hist)).to(device)).unsqueeze(0)
+                        if args.subgoals:
+                            # re-aim at the next waypoint along the expert path.
+                            if args.subgoal_mode == "time":
+                                # expert demo is time-aligned to the episode start:
+                                # index by elapsed env-step + lookahead.
+                                cost.set_subgoal_index(t + args.subgoal_lookahead)
+                            else:
+                                # nearest-latent (monotonic min_idx so it can't regress)
+                                cur_emb = info["hist_emb"][0, -1]
+                                sg_min_idx, _ = cost.pick_subgoal(
+                                    cur_emb, args.subgoal_lookahead, min_idx=sg_min_idx)
                         t0 = time.perf_counter()
                         out = solver.solve(info, init_mean=warm)
                         torch.cuda.synchronize() if device == "cuda" else None
@@ -226,6 +285,8 @@ def main():
 
                 a_raw = cost.denorm_action(a_norm.to(device))
                 a_raw = torch.clamp(a_raw, ACTION_LOW.to(device), ACTION_HIGH.to(device))
+                if args.grip_endpoints:
+                    a_raw[3] = 1.0; a_raw[7] = 1.0   # keep both endpoints gripped
                 step_out = env.step(a_raw.cpu().numpy().astype(np.float32))
                 perf = float(step_out["info"].get("normalized_performance",
                                                   step_out["info"].get("performance", 0.0)))

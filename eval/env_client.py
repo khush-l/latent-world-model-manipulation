@@ -149,6 +149,20 @@ class SubprocessSoftgym:
         resp = self._call(req)
         return _decode_ndarray(resp["frames"]), resp["perfs"]
 
+    def grip_endpoints(self, max_steps: int = 40):
+        """Run the scripted geometric expert through APPROACH->DESCEND->GRIP so both
+        pickers grip the rope ENDPOINTS, then stop (env left gripped, NOT restored).
+        Returns the gripped-state obs (same keys as reset) plus 'hold' / 'grip_steps'."""
+        resp = self._call({"cmd": "grip_endpoints", "max_steps": int(max_steps)})
+        return {
+            "pixels":  _decode_ndarray(resp["pixels"]),
+            "state":   _decode_ndarray(resp["state"]),
+            "proprio": _decode_ndarray(resp["proprio"]),
+            "info":    resp.get("info", {}),
+            "hold":    resp.get("hold", []),
+            "grip_steps": resp.get("grip_steps", 0),
+        }
+
     def get_goal_image(self):
         """Task goal image as (img_size, img_size, 3) uint8 (e.g. RopeConfiguration
         target character). Falls back to the current frame if the env has none."""

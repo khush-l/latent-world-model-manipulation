@@ -36,8 +36,10 @@ docker_common_args() {
   local args=(
     --rm
     --gpus all
+    -e NVIDIA_VISIBLE_DEVICES=all
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
+    -e "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
     -v "$REPO_ROOT:$CONTAINER_ROOT"
     -w "$SOFTAGENT_ROOT"
   )

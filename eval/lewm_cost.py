@@ -78,7 +78,9 @@ class LeWMCost:
         self.norm_low = self.norm_action(self.action_low)
         self.norm_high = self.norm_action(self.action_high)
 
-        self._goal_emb: Optional[torch.Tensor] = None  # (D,)
+        self._goal_emb: Optional[torch.Tensor] = None       # (D,) active goal/subgoal
+        self._waypoints: Optional[torch.Tensor] = None       # (N, D) expert-demo latent path
+        self.tempdist_head = None                            # optional learned cost-to-go
 
     # ---- normalization ----
 
@@ -107,6 +109,44 @@ class LeWMCost:
         out = self.model.encode({"pixels": goal_pixels.unsqueeze(0).unsqueeze(0).to(self.device)})
         self._goal_emb = out["emb"][0, 0].detach()  # (D,)
         return self._goal_emb
+
+    # ---- latent subgoals from an expert demo (crumpled -> flat) ----
+
+    @torch.no_grad()
+    def set_waypoints(self, frames_chw):
+        """Encode an expert demo into a latent waypoint path.
+
+        frames_chw: (N, C, H_img, W_img) ImageNet-normalized frames, ordered from
+        the episode's start state to the flat goal. Cached as (N, D) latents that
+        pick_subgoal() walks along. These are real encoded frames, so every
+        waypoint is guaranteed on the data manifold.
+        """
+        self._waypoints = self.encode_obs(frames_chw.to(self.device))  # (N, D)
+        return self._waypoints
+
+    @torch.no_grad()
+    def set_subgoal_index(self, idx):
+        """Set the active goal to waypoint `idx` (clamped). Used by time-indexed
+        selection: the expert demo is time-aligned to the episode start, so the
+        elapsed env-step directly indexes the waypoint — no latent matching, which
+        avoids mis-selection in the blurry intermediate-latent regime."""
+        i = min(max(int(idx), 0), self._waypoints.shape[0] - 1)
+        self._goal_emb = self._waypoints[i]
+        return i
+
+    @torch.no_grad()
+    def pick_subgoal(self, cur_emb, lookahead, min_idx=0):
+        """Set the active goal to the waypoint `lookahead` steps past the one
+        nearest the current latent (monotonic: search only idx >= min_idx).
+
+        cur_emb: (D,) current state latent. Returns (nearest_idx, target_idx).
+        """
+        W = self._waypoints
+        d = ((W[min_idx:] - cur_emb.to(W).unsqueeze(0)) ** 2).sum(dim=-1)  # (N-min_idx,)
+        nearest = int(d.argmin().item()) + min_idx
+        target = min(nearest + lookahead, W.shape[0] - 1)
+        self._goal_emb = W[target]
+        return nearest, target
 
     # ---- future proprio from planned actions (raw space) ----
 
@@ -192,13 +232,27 @@ class LeWMCost:
 
     @torch.no_grad()
     def get_cost(self, info_dict: dict, candidates: torch.Tensor) -> torch.Tensor:
-        """Terminal latent distance to goal for each candidate plan. Returns (B, S)."""
+        """Cost of the terminal latent vs the goal for each candidate plan. Returns (B, S).
+
+        Default = terminal-latent MSE (the LeWM metric). If a learned temporal-distance
+        head is attached (set_tempdist_head), cost = predicted #steps-to-goal from the
+        rolled-out terminal latent — an informative cost-to-go in place of flat MSE.
+        """
         B, S = candidates.shape[:2]
         goal = self._goal_emb.to(self.device)                 # (D,)
         emb_seq = self._rollout(info_dict, candidates)         # (B*S, H+n, D)
         terminal = emb_seq[:, -1]                              # (N, D) = s_{H-1+n}
-        cost = ((terminal - goal.unsqueeze(0)) ** 2).sum(dim=-1)  # (N,)
+        if self.tempdist_head is not None:
+            cost = self.tempdist_head(terminal, goal.unsqueeze(0).expand_as(terminal))  # (N,)
+        else:
+            cost = ((terminal - goal.unsqueeze(0)) ** 2).sum(dim=-1)  # (N,)
         return cost.reshape(B, S)
+
+    def set_tempdist_head(self, head):
+        """Attach a learned temporal-distance head; switches get_cost to cost-to-go."""
+        self.tempdist_head = head.eval().to(self.device)
+        for p in self.tempdist_head.parameters():
+            p.requires_grad_(False)
 
     @torch.no_grad()
     def imagine(self, info_dict: dict, plan: torch.Tensor) -> torch.Tensor:

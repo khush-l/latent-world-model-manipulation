@@ -241,6 +241,40 @@ class EnvSession(object):
 
         return np.asarray(frames, dtype=np.uint8), perfs
 
+    def grip_endpoints(self, max_steps=40, noise_scale=0.0):
+        """Run the geometric expert through APPROACH_XY -> DESCEND -> GRIP so both
+        pickers grip the rope ENDPOINTS, then STOP (before any stretch/flatten).
+
+        Unlike make_goal_trajectory, state is NOT restored: the env is left with the
+        endpoints gripped, so an MPC caller can take over from the gripped state (the
+        'cheat' that removes the grasp/approach problem). Returns the current obs +
+        the picker hold flags.
+        """
+        import pyflex  # noqa: F401
+        from geometric_policy import make_policy, LIFT  # type: ignore
+        policy = make_policy(self.env_name, self.env, self.num_picker,
+                             kind="geometric", noise_scale=noise_scale)
+        policy.reset()
+        steps = 0
+        while steps < int(max_steps):
+            self.env.step(policy.get_action())
+            steps += 1
+            if getattr(policy, "phase", 0) >= LIFT:   # advanced past GRIP -> gripped
+                break
+        state, proprio = self._state()
+        try:
+            info = _encode_info(self.env._get_info())
+        except Exception:
+            info = {}
+        return {
+            "pixels": _encode_ndarray(self._render()),
+            "state": _encode_ndarray(state),
+            "proprio": _encode_ndarray(proprio),
+            "info": info,
+            "grip_steps": steps,
+            "hold": [float(g) for g in policy.grip.tolist()],
+        }
+
     def get_goal_image(self):
         """Return the task's goal image as (img_size, img_size, 3) uint8.
 
@@ -324,6 +358,9 @@ def main():
                     seed=req.get("seed"),
                 )
                 resp = {"ok": True, "frames": _encode_ndarray(frames), "perfs": perfs}
+            elif cmd == "grip_endpoints":
+                resp = {"ok": True}
+                resp.update(session.grip_endpoints(max_steps=int(req.get("max_steps", 40))))
             elif cmd == "get_goal_image":
                 resp = {"ok": True, "goal_image": _encode_ndarray(session.get_goal_image())}
             elif cmd == "close":
