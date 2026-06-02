@@ -39,10 +39,15 @@ docker_common_args() {
     -e NVIDIA_VISIBLE_DEVICES=all
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
-    -e "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
     -v "$REPO_ROOT:$CONTAINER_ROOT"
     -w "$SOFTAGENT_ROOT"
   )
+
+  # Pin to a GPU ONLY when CUDA_VISIBLE_DEVICES is explicitly set (multi-GPU
+  # sharding). Empty would tell CUDA "no devices" -> cuInit NO_DEVICE.
+  if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    args+=(-e "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES")
+  fi
 
   if [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
     args+=(

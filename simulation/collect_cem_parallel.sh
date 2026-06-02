@@ -45,11 +45,19 @@ SOFTGYM=simulation/docker/softgym-local.sh
 TOTAL_EPISODES=${TOTAL_EPISODES:-2000}
 SHARDS=${SHARDS:-200}              # small shards (10 eps) -> incremental, interrupt-safe
 MAX_PAR=${MAX_PAR:-12}             # concurrent shards; MAX_PAR*8 <= vCPUs (126 -> <=15)
-NUM_GPUS=${NUM_GPUS:-4}            # round-robin shards across GPUs (avoid piling on GPU 0!)
+# Round-robin shards across GPUs. AUTO-DETECT from nvidia-smi (default) so a 1-GPU
+# box never pins a shard to a nonexistent GPU. Override with NUM_GPUS=N if needed.
+NUM_GPUS=${NUM_GPUS:-$(nvidia-smi -L 2>/dev/null | grep -c '^GPU' || echo 1)}
+[ "${NUM_GPUS:-0}" -ge 1 ] 2>/dev/null || NUM_GPUS=1
 MAX_ITERS=${MAX_ITERS:-3}          # slim CEM (validated: 0.998, ~2x faster than iters=5)
 TPD=${TPD:-900}                    # population = TPD/MAX_ITERS/plan_horizon(15)
 IMG=${IMG:-128}
 OUT_H5=${OUT_H5:-simulation/data/rope/rope_cem_dataset.h5}
+# Per-box seed base: shard i uses seed = SEED_BASE + i*100000. To collect DISTINCT
+# ropes across multiple machines (so merging adds diversity, not duplicates), give
+# each box a different SEED_BASE spaced well beyond SHARDS*100000 (e.g. dev=1000,
+# box2=50000000, box3=100000000).
+SEED_BASE=${SEED_BASE:-1000}
 ENV_NAME=RopeFlatten
 if [[ "${SMOKE:-0}" == "1" ]]; then TOTAL_EPISODES=4; SHARDS=2; MAX_PAR=2; fi
 
@@ -71,7 +79,7 @@ echo "  -> ~$((MAX_PAR/NUM_GPUS>0?MAX_PAR/NUM_GPUS:1)) shards/GPU = ~$(((MAX_PAR
 # ---- 1. CEM planning + 2. replay->npz, per shard (capped at MAX_PAR) ----
 shard_pipe() {  # $1 = shard index
   local i=$1
-  local seed=$(( 1000 + i * 100000 ))            # globally distinct rope seeds
+  local seed=$(( SEED_BASE + i * 100000 ))       # per-box distinct rope seeds
   local off=$(( i * EP_PER_SHARD ))              # global episode_idx offset
   local gpu=$(( i % NUM_GPUS ))                  # pin this shard to one GPU (round-robin)
   local cemdir="$CEM_BASE/shard$i"               # container-relative

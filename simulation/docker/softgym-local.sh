@@ -47,11 +47,15 @@ docker_common_args() {
     -e HOME=/tmp
     -e "SOFTGYM_PICKER_COLOR=${SOFTGYM_PICKER_COLOR:-}"
     -e "SOFTGYM_HORIZON=${SOFTGYM_HORIZON:-}"
-    -e "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
-    -e "EGL_GPU=${CUDA_VISIBLE_DEVICES:-0}"
     -v "$DOCKER_REPO_ROOT:$CONTAINER_ROOT"
     -w "$CONTAINER_ROOT"
   )
+
+  # Pin to a GPU ONLY when CUDA_VISIBLE_DEVICES is explicitly set (for multi-GPU
+  # sharding). Passing it empty would tell CUDA "no devices" -> cuInit NO_DEVICE.
+  if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    args+=(-e "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES" -e "EGL_GPU=$CUDA_VISIBLE_DEVICES")
+  fi
 
   # Keep STDIN open when SOFTGYM_STDIN=1 — required for the env_server IPC
   # bridge (eval/env_client.py pipes JSON commands to the container's stdin).
