@@ -88,7 +88,7 @@ block = r'''    TrainConfig(
             action_expert_variant="gemma_300m_lora",
         ),
         data=LeRobotSoftGymDataConfig(
-            repo_id="khush/softgym-rope-openpi",
+            repo_id=os.environ.get("OPENPI_DATASET_REPO_ID", "khush/softgym-rope-openpi"),
             base_config=DataConfig(prompt_from_task=True),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_droid/params"),
@@ -103,8 +103,8 @@ block = r'''    TrainConfig(
         num_train_steps=int(os.environ.get("OPENPI_NUM_TRAIN_STEPS", "20_000")),
         batch_size=int(os.environ.get("OPENPI_BATCH_SIZE", "4")),
         num_workers=int(os.environ.get("OPENPI_NUM_WORKERS", "4")),
-        save_interval=1000,
-        keep_period=5000,
+        save_interval=int(os.environ.get("OPENPI_SAVE_INTERVAL", "1000")),
+        keep_period=int(os.environ.get("OPENPI_KEEP_PERIOD", "5000")),
     ),
 '''
 if marker not in text:

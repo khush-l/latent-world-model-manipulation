@@ -48,3 +48,7 @@ simulation/PyFlex/**/*.apk
 outputs/
 baselines/logs/
 *.log
+
+baselines/artifacts/**/*.tar.gz
+baselines/artifacts/**/*.h5
+baselines/artifacts/pi0_cem_final_handoff/

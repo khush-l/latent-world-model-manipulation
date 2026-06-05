@@ -91,7 +91,9 @@ Full spec in [`DATA_FORMAT.md`](./DATA_FORMAT.md). Summary:
 
 | Hyperparameter | Value |
 |---|---|
-| Patch size | 14 |
+| Input resolution | 128 x 128 |
+| Patch size | 16 x 16 |
+| Patch tokens | 64 |
 | Transformer layers | 12 |
 | Attention heads | 3 |
 | Hidden size `D` | 192 |

@@ -30,12 +30,12 @@ python training/train.py \
   --no-sigreg --precision fp32
 ```
 
-Full-config single-GPU run (matches `references/le-wm-main/config/train/lewm.yaml`):
+Reported SoftGym single-GPU run (native 128 x 128 observations, 16 x 16 patches):
 
 ```bash
 python training/train.py \
   --data training/data/clothflatten_mixed_v3.h5 \
-  --batch-size 128 --img-size 224 --patch-size 14 \
+  --batch-size 128 --img-size 128 --patch-size 16 \
   --steps 100000 --lr 5e-5 \
   --run-name clothflatten_full
 ```
