@@ -3,7 +3,17 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd)
-PY="$REPO_ROOT/training/.venv/bin/python"
+if [[ -n "${LEROBOT_POLICY_PYTHON:-}" ]]; then
+  PY="$LEROBOT_POLICY_PYTHON"
+elif [[ -x "$REPO_ROOT/training/.venv/bin/python" ]]; then
+  PY="$REPO_ROOT/training/.venv/bin/python"
+elif [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  PY="$REPO_ROOT/.venv/bin/python"
+elif [[ -x "/home/ubuntu/openpi/.venv/bin/python" ]]; then
+  PY="/home/ubuntu/openpi/.venv/bin/python"
+else
+  PY="python3"
+fi
 SERVER="$REPO_ROOT/baselines/policy_server.py"
 PORT=${LEROBOT_POLICY_PORT:-8765}
 HOST_FOR_CONTAINER=${LEROBOT_POLICY_HOST_FOR_CONTAINER:-172.17.0.1}

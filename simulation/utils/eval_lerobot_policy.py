@@ -72,6 +72,8 @@ def parse_args():
     p.add_argument("--policy-name", default="lerobot_policy")
     p.add_argument("--checkpoint", default="")
     p.add_argument("--timeout-s", type=float, default=30.0)
+    p.add_argument("--fixed-config-ids", action="store_true", help="Evaluate config IDs config_start..config_start+n-1 instead of random resets.")
+    p.add_argument("--config-start", type=int, default=0)
     return p.parse_args()
 
 
@@ -210,7 +212,13 @@ def main():
     try:
         for ep in range(args.num_episodes):
             post_reset(args.policy_url, args.timeout_s)
-            env.reset()
+            if args.fixed_config_ids:
+                cfg_id = (args.config_start + ep) % len(env.cached_configs)
+                cfg = env.cached_configs[cfg_id] if getattr(env, "cached_configs", None) else None
+                init = env.cached_init_states[cfg_id] if getattr(env, "cached_init_states", None) else None
+                env.reset(config=cfg, config_id=cfg_id, initial_state=init)
+            else:
+                env.reset()
             num_picker = int(env_kwargs.get("num_picker", getattr(env.action_tool, "num_picker", 2)))
             frames = []
             rewards = []
@@ -254,6 +262,7 @@ def main():
             final_norm = float(info.get("normalized_performance", np.nan))
             row = {
                 "episode": ep,
+                "config_id": (args.config_start + ep) % len(env.cached_configs) if args.fixed_config_ids else "",
                 "env": args.env_name,
                 "policy": args.policy_name,
                 "checkpoint": args.checkpoint,
