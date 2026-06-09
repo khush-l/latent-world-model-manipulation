@@ -231,6 +231,7 @@ def main():
             info = env._get_info()
             start_norm = float(info.get("normalized_performance", np.nan))
 
+            # rollout loop: render, ask host policy, then step softgym
             for step in range(args.horizon):
                 image, _ = render_rgb_depth(env, args.img_size, False)
                 if args.save_every_video > 0 and ep % args.save_every_video == 0:
@@ -243,6 +244,7 @@ def main():
                 inference_latencies.append(inference_ms)
                 roundtrip_latencies.append(roundtrip_ms)
                 if chunk_generated is True:
+                    # chunk calls are the fair latency number for action policies
                     chunk_inference_latencies.append(inference_ms)
                     chunk_roundtrip_latencies.append(roundtrip_ms)
                 elif chunk_generated is False:
@@ -309,6 +311,7 @@ def main():
         env.close()
 
     csv_rows = []
+    # raw latency arrays go in summary stats, not the per-episode csv
     for row in rows:
         row = dict(row)
         row.pop("_all_inference_latencies", None)

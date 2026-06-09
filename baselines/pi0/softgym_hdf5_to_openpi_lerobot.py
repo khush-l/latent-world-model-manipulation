@@ -42,6 +42,7 @@ def iter_episode_slices(f: h5py.File):
     episode_idx = f["episode_idx"][:]
     n = len(episode_idx)
     i = 0
+    # episodes are stored back to back in the hdf5, so walk the runs
     while i < n:
         j = i + 1
         while j < n and episode_idx[j] == episode_idx[i]:
@@ -57,6 +58,7 @@ def summarize(path: Path) -> dict:
         if missing:
             raise KeyError(f"{path} missing required dataset(s): {missing}")
         action = f["action"][:]
+        # this catches the padded terminal actions before we write anything
         return {
             "env_name": str(_decode_attr(f.attrs.get("env_name", "unknown"))),
             "image_shape_hwc": list(f["pixels"].shape[1:]),
@@ -124,6 +126,7 @@ def main() -> None:
                 break
             rows = np.arange(start, end)
             action = f["action"][rows]
+            # last row can have nan action, bc there is no next action target
             rows = rows[np.isfinite(action).all(axis=1)]
             if len(rows) == 0:
                 continue

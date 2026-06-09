@@ -31,6 +31,7 @@ def moving_avg(xs, window):
         return xs
     out = []
     total = 0.0
+    # rolling sum keeps this simple and fast enough for long logs
     for i, x in enumerate(xs):
         total += x
         if i >= window:
@@ -42,6 +43,7 @@ def moving_avg(xs, window):
 def load_records(path: Path):
     records = []
     text = path.read_text(errors="replace").replace("\r", "\n")
+    # lerobot logs are plain text, so regex is less brittle than split cols
     for match in LOG_RE.finditer(text):
         row = match.groupdict()
         records.append(
@@ -101,6 +103,7 @@ def main() -> None:
             ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 
     axes.flat[-1].axis("off")
+    # use the last panel as a tiny run card instead of making another plot
     axes.flat[-1].text(
         0.0,
         1.0,

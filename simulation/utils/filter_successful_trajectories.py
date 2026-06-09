@@ -42,6 +42,7 @@ def load_metadata(npz: np.lib.npyio.NpzFile) -> Dict[str, Any]:
 
 
 def final_finite_value(arr: np.ndarray) -> Optional[float]:
+    # some logs have padding/nans, so use the last real value
     flat = np.asarray(arr, dtype=np.float64).reshape(-1)
     finite = flat[np.isfinite(flat)]
     if finite.size == 0:
@@ -82,6 +83,7 @@ def discover(input_dir: Path) -> List[Path]:
 
 
 def select_rows(rows: List[Dict[str, Any]], threshold: Optional[float], top_k: Optional[int], min_episodes: int):
+    # rank first, then the threshold/top-k rules are easy to combine
     scored = [r for r in rows if r["final_score"] is not None]
     scored.sort(key=lambda r: r["final_score"], reverse=True)
     selected = []
@@ -114,6 +116,7 @@ def write_csv(path: Path, rows: Iterable[Dict[str, Any]]) -> None:
 
 
 def copy_selected(selected: List[Dict[str, Any]], output_dir: Path, mode: str) -> None:
+    # overwrite selected files so reruns don't leave stale episodes around
     output_dir.mkdir(parents=True, exist_ok=True)
     for r in selected:
         src = r["path"]

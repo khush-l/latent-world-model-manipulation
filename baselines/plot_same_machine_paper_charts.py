@@ -19,7 +19,6 @@ MODELS = [
     {
         "key": "lewm_mpc",
         "label": "Our Model",
-        "legend": "Our Model (SR=68%)",
         "color": "#1b9e3c",
         "kind": "mpc",
         "summary": ROOT / "eval/runs/same_machine_lewm_mpc_50/summary_k5.json",
@@ -28,7 +27,6 @@ MODELS = [
     {
         "key": "act",
         "label": "ACT",
-        "legend": "ACT (SR=18%)",
         "color": "#d62728",
         "kind": "direct",
         "summary": ROOT / "simulation/data/evals/same_machine_direct_fixed_50/act_rope_cem_final_015000_episodes50/summary.json",
@@ -38,7 +36,6 @@ MODELS = [
     {
         "key": "smolvla",
         "label": "SmolVLA",
-        "legend": "SmolVLA (SR=6%)",
         "color": "#4d4d4d",
         "kind": "direct",
         "summary": ROOT / "simulation/data/evals/same_machine_direct_fixed_50/smolvla_rope_cem_final_045000_episodes50/summary.json",
@@ -48,7 +45,6 @@ MODELS = [
     {
         "key": "pi0",
         "label": "pi0 LoRA",
-        "legend": "pi0 LoRA (SR=4%)",
         "color": "#377eb8",
         "kind": "direct",
         "summary": ROOT / "simulation/data/evals/same_machine_direct_fixed_50/pi0_ckpt10000_episodes50/summary.json",
@@ -83,6 +79,7 @@ def pct(vals, q):
 
 def direct_curves(scores):
     curves = []
+    # direct eval only saved start/final score, so this is just for the figure
     alpha = (1.0 - np.exp(-STEPS / 18.0)) / (1.0 - np.exp(-STEPS[-1] / 18.0))
     for r in scores:
         start = float(r["start_normalized_performance"])
@@ -94,6 +91,7 @@ def direct_curves(scores):
 
 def mpc_curves(eps):
     curves = []
+    # mpc runs have real per-step curves, unlike the direct-action baselines
     for e in eps:
         c = np.asarray(e["mpc_perf_curve"], dtype=float)
         if len(c) < len(STEPS):
@@ -116,7 +114,6 @@ def direct_row(spec):
     lat_samples = [float(r.get("policy_chunk_inference_latency_ms_mean", r.get("policy_inference_latency_ms_mean", np.nan))) for r in scores]
     return {
         "model": spec["label"],
-        "legend": spec["legend"],
         "kind": "direct-action",
         "color": spec["color"],
         "n": int(summary["n_episodes"]),
@@ -145,7 +142,6 @@ def mpc_row(spec, success_threshold):
     lat_ms = [1000.0 * float(e.get("mean_plan_lat_s", 0.0)) for e in eps]
     return {
         "model": spec["label"],
-        "legend": spec["legend"],
         "kind": "model-based planning",
         "color": spec["color"],
         "n": len(eps),
@@ -212,8 +208,10 @@ def plot_accuracy(rows, out_base, success_threshold):
         mean = np.nanmean(curves, axis=0)
         q25 = np.nanpercentile(curves, 25, axis=0)
         q75 = np.nanpercentile(curves, 75, axis=0)
+        sr = 100.0 * float(r["success_rate"])
+        label = f"{r['model']} (SR={sr:.0f}%)"
         ax.fill_between(STEPS, q25, q75, color=r["color"], alpha=0.16, linewidth=0)
-        ax.plot(STEPS, mean, color=r["color"], linewidth=2.4, label=r["legend"])
+        ax.plot(STEPS, mean, color=r["color"], linewidth=2.4, label=label)
     ax.axhline(success_threshold, color="#1b7f2a", linestyle="--", linewidth=1.2, label="success (0.8)")
     ax.set_xlim(-1, 76)
     ax.set_ylim(0, 1.02)
@@ -230,42 +228,32 @@ def plot_accuracy(rows, out_base, success_threshold):
     plt.close(fig)
 
 
-def format_params(label: str) -> str:
-    if label == "Our Model":
-        return "~18.6M"
-    if label == "ACT":
-        return "~52M"
-    if label == "SmolVLA":
-        return "~450M"
-    if label == "pi0 LoRA":
-        return "~3B"
-    return "—"
-
-
 def format_latency_row(row: dict) -> str:
-    return f"{row['latency_ms_mean']:.1f} ms"
+    return f"{row['latency_ms_mean']:.1f}"
 
 
 def plot_latency(rows, out_base):
-    ordered = [
-        next(r for r in rows if r["model"] == "Our Model"),
-        next(r for r in rows if r["model"] == "ACT"),
-        next(r for r in rows if r["model"] == "SmolVLA"),
-        next(r for r in rows if r["model"] == "pi0 LoRA"),
-    ]
+    by_model = {r["model"]: r for r in rows}
+    # keep the table order stable even if a run is missing locally
+    order = ["Our Model", "ACT", "SmolVLA", "pi0 LoRA"]
+    ordered = [by_model[name] for name in order if name in by_model]
 
-    columns = ["Method", "Params", "Avg latency (ms)"]
+    columns = ["Policy", "Episodes", "Total frames", "Mean final perf.", "Avg latency (ms)"]
     cell_text = []
     for row in ordered:
+        episodes = int(row["n"])
+        total_frames = episodes * 75
         cell_text.append([
             row["model"],
-            format_params(row["model"]),
+            f"{episodes:,}",
+            f"{total_frames:,}",
+            f"{row['mean_perf']:.3f}",
             format_latency_row(row),
         ])
 
-    fig, ax = plt.subplots(figsize=(8.9, 2.6))
+    fig, ax = plt.subplots(figsize=(9.6, 2.9))
     ax.axis("off")
-    ax.set_title("Normalized Latency on SoftGym RopeFlatten", fontsize=13, pad=14)
+    ax.set_title("Normalized Latency on SoftGym RopeFlatten", fontsize=13, pad=16)
 
     table = ax.table(
         cellText=cell_text,
@@ -273,21 +261,31 @@ def plot_latency(rows, out_base):
         cellLoc="center",
         colLoc="center",
         loc="center",
-        bbox=[0.02, 0.05, 0.96, 0.78],
+        bbox=[0.01, 0.05, 0.98, 0.78],
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(10.8)
+    table.set_fontsize(10.6)
 
+    n_body = len(cell_text)
     for (r, c), cell in table.get_celld().items():
         cell.set_edgecolor("black")
-        cell.set_linewidth(0.9)
         if r == 0:
+            cell.visible_edges = "TB"
+            cell.set_linewidth(0.9)
             cell.set_facecolor("white")
             cell.set_text_props(weight="bold", color="#111111")
-        elif c == 0:
-            cell.set_text_props(weight="bold", color="#111111")
+        elif r == n_body:
+            cell.visible_edges = "B"
+            cell.set_linewidth(0.9)
+            if c == 0:
+                cell.set_text_props(weight="bold", color="#111111")
+        else:
+            cell.visible_edges = "open"
+            cell.set_linewidth(0.0)
+            if c == 0:
+                cell.set_text_props(weight="bold", color="#111111")
 
-    table.scale(1.0, 1.25)
+    table.scale(1.0, 1.22)
     fig.tight_layout()
     fig.savefig(out_base.with_suffix(".png"), dpi=300, bbox_inches="tight")
     fig.savefig(out_base.with_suffix(".pdf"), bbox_inches="tight")
