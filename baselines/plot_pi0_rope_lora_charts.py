@@ -100,7 +100,7 @@ def pretty_policy(name: str) -> str:
         "act_rope_full_mixed_v1_25k": "ACT\nmixed 25k",
         "smolvla_rope_full_mixed_v1_25k": "SmolVLA\nmixed 25k",
         "pi0_rope_lora_g5": "pi0 LoRA\ngeo 20k",
-        "pi0_rope_smoke": "pi0 LoRA\ngeo 20k",
+        "pi0_rope_lora": "pi0 LoRA\ngeo 20k",
     }
     return labels.get(name, name.replace("_", " "))
 

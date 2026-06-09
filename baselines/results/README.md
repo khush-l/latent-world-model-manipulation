@@ -33,7 +33,7 @@ though not all of them ended up in the paper.
 | SmolVLA, geometric rope demos | 10 | 0.646 | strongest early direct-action result |
 | ACT, full mixed rope data | 10 | 0.400 | mixed data did not help ACT here |
 | SmolVLA, full mixed rope data | 10 | 0.436 | lower than geometric-only run |
-| pi0 LoRA, geometric rope demos | 10 | 0.460 | first OpenPI/pi0 smoke-to-eval run |
+| pi0 LoRA, geometric rope demos | 10 | 0.460 | first OpenPI/pi0 eval run |
 
 Kept figures include the comparison plots under `rope_geometric_5k_v3_20k/`,
 `rope_full_mixed_v1_25k/`, `pi0_rope_lora_g5/`, and `presentation/`.
