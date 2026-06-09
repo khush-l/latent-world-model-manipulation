@@ -61,4 +61,4 @@ The CEM-final checkpoint sweep helped choose the longer-eval checkpoints:
 Generative AI tools were used in an assistive capacity for parts of this branch,
 including code drafting/debugging, plotting cleanup, documentation cleanup, and
 repository organization. Project authors reviewed the resulting code and docs,
-and relevant syntax checks or figure-regeneration checks were run before commits. A best-effort record of AI-assisted work is in `ai_usage/`. 
+and relevant syntax checks or figure-regeneration checks were run before commits. A record of AI-assisted work is in `ai_chat_logs.pdf`. 
