@@ -1,0 +1,12 @@
+{
+  "checkpoint": "outputs/train/act_softgym_cloth_scripted_vla_150_tuned_20k/checkpoints/020000/pretrained_model",
+  "created_at": "2026-05-28T17:04:21+0000",
+  "env": "ClothFlatten",
+  "mean_final_normalized_performance": 0.16536091268062592,
+  "mean_return": 8.091922812630086,
+  "n_episodes": 10,
+  "policy": "act_cloth_tuned_20k",
+  "std_final_normalized_performance": 0.10220260918140411,
+  "success_rate": 0.0,
+  "success_threshold": 0.8
+}

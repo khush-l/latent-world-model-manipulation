@@ -44,3 +44,15 @@ simulation/PyFlex/bindings/examples/*.gif
 simulation/PyFlex/**/*.exp
 simulation/PyFlex/**/*.ilk
 simulation/PyFlex/**/*.apk
+# Baseline generated artifacts
+outputs/
+baselines/logs/
+*.log
+
+baselines/artifacts/**/*.tar.gz
+baselines/artifacts/**/*.h5
+baselines/artifacts/pi0_cem_final_handoff/
+# Local handoff bundles and heavy eval media
+baselines/artifacts/pi0_best_10k_latency_handoff/
+baselines/artifacts/**/videos/
+.venv-latency-lerobot/

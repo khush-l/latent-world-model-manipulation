@@ -80,7 +80,7 @@ NaN handling: `batch["action"]` may contain NaN at episode-terminal rows (see
 
 | Module | Spec | Approx params |
 |---|---|---|
-| `ViTTiny` | img=224, patch=14, depth=12, heads=3, D=192, MLP=768 | ~5.7M |
+| `ViTTiny` | img=128, patch=16, depth=12, heads=3, D=192, MLP=768, 64 patch tokens | ~5.3M |
 | `Embedder` (action) | Conv1d(8→8, k=1) + Linear(8→768) + SiLU + Linear(768→192) | ~0.15M |
 | `MLP` projector | Linear(192→2048) + LN + GELU + Linear(2048→192) | ~0.79M |
 | `MLP` pred_proj | same shape | ~0.79M |
@@ -95,12 +95,14 @@ BN for full-scale runs with `use_bn_proj=True` if you want exact parity.
 
 ## 4. Configuration knobs
 
-Match `references/le-wm-main/config/train/lewm.yaml` defaults.
+`training/train.py` still exposes the LeWM reference defaults, but the SoftGym
+RopeFlatten runs reported in the paper use the native 128 x 128 observations
+with 16 x 16 patches.
 
 | Flag | Default | Source |
 |---|---|---|
-| `--img-size` | 224 | `lewm.yaml:13` |
-| `--patch-size` | 14 | `model/lewm.yaml:6` |
+| `--img-size` | 128 for reported SoftGym runs; 224 for reference-parity runs | `build_lewm()` / `lewm.yaml:13` |
+| `--patch-size` | 16 for reported SoftGym runs; 14 for reference-parity runs | `build_lewm()` / `model/lewm.yaml:6` |
 | `--embed-dim` | 192 | `lewm.yaml:38` |
 | `--history-size` | 3 | `lewm.yaml:36` |
 | `--num-preds` | 1 | `lewm.yaml:37` |
