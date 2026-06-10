@@ -1,26 +1,7 @@
-"""Faithful LeWM cost model for MPC planning over our trained JEPA.
-
+"""
 Mirrors references/stable-worldmodel-main/stable_worldmodel/wm/lewm/lewm.py
 (encode / rollout / criterion / get_cost), adapted to our JEPA
 (training/model.py) and our action/proprio conventions.
-
-Two correctness properties this enforces (the bugs in the old planner):
-
-  1. ACTION SCALE. The JEPA was trained on z-score-NORMALIZED actions/proprio
-     (training/dataset.py). The solver here optimizes actions in NORMALIZED
-     space; this module consumes normalized actions and exposes
-     denorm_action() to map a chosen action back to the env box. Feeding raw
-     ~0.01 actions (the old bug) leaves the action conditioning dead.
-
-  2. ROLLOUT ALIGNMENT. Our predictor is trained as: action a_i applied at
-     state s_i predicts s_{i+1}, over windows of `history_size` (s,a) pairs
-     (training/model.py:lewm_forward). So the rollout seeds with the H real
-     history frames + the H-1 real past actions, and the FIRST planned action
-     is the action taken at the current frame — used in the very first
-     prediction. Every planned action drives a transition; the terminal latent
-     (after all n planned actions) is compared to the goal. The old planner
-     appended the future action AFTER predicting, wasting the first step and
-     never using the last action.
 
 Action layout (A=8):  [d0_xyz(3), grip0, d1_xyz(3), grip1]
 Proprio layout (P=8):  [p0_xyz(3), p1_xyz(3), hold0, hold1]
