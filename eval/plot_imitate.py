@@ -1,25 +1,3 @@
-"""Presentation charts for the imitate-MPC evaluation.
-
-Reads the per-run summary JSONs written by eval/run_mpc.py (--mode imitate)
-and produces three figures:
-
-  1. method_bar.png      — peak improvement (Δmax = max - start) by method,
-                            at a fixed goal-offset k. Shows random vs CEM
-                            (paper) vs our gradient planner, baseline vs proprio.
-  2. horizon_curve.png   — Δmax vs goal-offset k (planning-horizon sweep),
-                            one line per model (baseline / proprio).
-  3. within_episode.png  — normalized performance vs env step (mean ± SEM),
-                            MPC baseline / proprio vs the expert reference.
-
-Run directory naming convention (under --runs-dir):
-    random_k{K}, cem_base_k{K}, cem_prop_k{K},
-    grad_base_k{K}, grad_prop_k{K}
-Each holds a single summary_k{K}.json.
-
-Usage:
-    python eval/plot_imitate.py --runs-dir eval/runs/charts --k-bar 5
-"""
-
 import argparse
 import glob
 import json

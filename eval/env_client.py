@@ -1,17 +1,3 @@
-"""Host-side (py3.12) client for the SoftGym env_server running inside Docker.
-
-Spawns the softgym Docker via `simulation/docker/softgym-local.sh run "..."`
-with `python utils/env_server.py`, then exchanges line-delimited JSON over
-the subprocess's stdin/stdout. Provides a clean EnvAdapter interface that
-matches the abstract one in `eval/run_mpc.py`.
-
-Usage:
-    env = SubprocessSoftgym(env_name="RopeFlatten", num_variations=200, img_size=128)
-    obs = env.reset(config_id=0)
-    obs, reward, done, info = env.step(action)
-    env.close()
-"""
-
 import base64
 import json
 import os

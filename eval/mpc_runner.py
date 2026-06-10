@@ -68,6 +68,9 @@ def main():
     p.add_argument("--ckpt", default="training/runs/rope_proprio_v1/ckpt_final.pt")
     p.add_argument("--n-episodes", type=int, default=8)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--env-seed", type=int, default=0,
+                   help="Seed for env variation generation. Use a CEM collection "
+                        "seed base (e.g. 300000000) to reproduce training ropes.")
     p.add_argument("--num-variations", type=int, default=200)
     p.add_argument("--eval-budget", type=int, default=75)
     p.add_argument("--history-size", type=int, default=3)
@@ -144,7 +147,10 @@ def main():
     ).to(device)
     state = torch.load(args.ckpt, map_location=device)
     state = state.get("model_state_dict", state) if isinstance(state, dict) else state
-    model.load_state_dict(state); model.eval()
+    # strict=False so checkpoints with extra train-time heads (e.g. the aux
+    # state-prediction head, not built here) still load — planning only uses
+    # encode/predict.
+    model.load_state_dict(state, strict=False); model.eval()
 
     data_h5 = train_cfg.get("data", str(PROJECT_ROOT / "simulation/data/rope/rope_full_dataset.h5"))
     a_mean, a_std, p_mean, p_std = load_stats(data_h5, device)
@@ -177,7 +183,8 @@ def main():
     A = cost.action_dim
 
     env = SubprocessSoftgym(env_name=args.env_name, num_variations=args.num_variations,
-                            img_size=args.img_size, num_picker=2)
+                            img_size=args.img_size, num_picker=2,
+                            env_seed=args.env_seed)
     rng = np.random.RandomState(args.seed)
 
     def norm_a(a_raw):  # (..., A) raw -> normalized
@@ -197,13 +204,21 @@ def main():
                 start_perf = float(obs["info"].get("normalized_performance", start_perf))
                 print(f"    [grip-endpoints] hold={obs.get('hold')} after {obs.get('grip_steps')} steps "
                       f"start_perf={start_perf:.3f}")
-            # fixed flat goal = expert reference's FLATTEST frame (argmax perf),
-            # not its last frame (the scripted expert often drifts after peaking).
-            ref_frames, ref_perfs = env.make_goal_trajectory(n_steps=args.eval_budget, seed=1000 + cfg_id)
-            expert_max = float(max(ref_perfs)) if ref_perfs else 0.0
-            goal_idx = int(np.argmax(ref_perfs)) + 1 if ref_perfs else len(ref_frames) - 1
-            goal_idx = min(goal_idx, len(ref_frames) - 1)
-            goal_chw = torch.from_numpy(_to_imagenet_float(ref_frames[goal_idx])).float()
+            # Goal image: for RopeFlatten use the scripted expert's flattest
+            # frame; for envs like RopeConfiguration that store a pre-rendered
+            # target image (goal_character_img), use that directly.
+            try:
+                ref_frames, ref_perfs = env.make_goal_trajectory(n_steps=args.eval_budget, seed=1000 + cfg_id)
+                expert_max = float(max(ref_perfs)) if ref_perfs else 0.0
+                goal_idx = int(np.argmax(ref_perfs)) + 1 if ref_perfs else len(ref_frames) - 1
+                goal_idx = min(goal_idx, len(ref_frames) - 1)
+                goal_chw = torch.from_numpy(_to_imagenet_float(ref_frames[goal_idx])).float()
+            except NotImplementedError:
+                # env has no scripted expert (e.g. RopeConfiguration) — use the
+                # env's pre-rendered target image instead.
+                goal_img = env.get_goal_image()
+                goal_chw = torch.from_numpy(_to_imagenet_float(goal_img)).float()
+                ref_perfs = []; expert_max = 0.0
             cost.set_goal(goal_chw)
 
             # Latent subgoals: encode the expert demo (start state .. flattest
