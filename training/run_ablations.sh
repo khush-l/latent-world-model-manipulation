@@ -164,3 +164,87 @@ echo "" | tee -a "$SUMMARY"
 echo "ablation sweep finished: $(date)" | tee -a "$SUMMARY"
 echo "All runs grouped in W&B under tag: $SWEEP_TAG" | tee -a "$SUMMARY"
 echo "Local summary: $SUMMARY"
+
+
+
+# #!/usr/bin/env bash
+# # Sequentially train all final models on ONE GPU (single H100).
+# #
+# # 5 runs:
+# #   1. mix19k_base       d192, proprio ON,  aux OFF   (baseline)
+# #   2. mix19k_d384       d384  (capacity ablation)
+# #   3. mix19k_aux        aux-state head ON (--aux-state-weight 0.5)
+# #   4. mix19k_noproprio  proprio OFF
+# #   5. mix20k_u          d192 baseline on the RopeFlatten+U union (multi-task)
+# #
+# # Dataloading: the final datasets are large (~71-76 GB of uint8 pixels), so
+# # --gpu-cache would saturate an 80 GB H100 (and OOM on d384/the 20k set).
+# # We cache pixels in HOST RAM (--cache-pixels, uint8, ~76 GB, COW-shared across
+# # workers) when enough RAM is free, else fall back to plain streaming.
+# #
+# # Prereqs on the box: repo synced (with the aux-head edits in model.py/train.py),
+# #   .venv with torch, wandb logged in (or set WANDB_MODE=offline), and both
+# #   datasets present under simulation/data/rope/.
+# #
+# # Usage:  tmux new -s train 'bash training/run_all_ablations.sh'
+# #   STEPS=60000 bash training/run_all_ablations.sh        # shorter runs
+# #   WANDB_MODE=offline bash training/run_all_ablations.sh # no wandb login
+# set -uo pipefail
+
+# REPO=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# cd "$REPO"
+# PY=.venv/bin/python
+
+# STEPS=${STEPS:-100000}
+# SAVE_EVERY=${SAVE_EVERY:-20000}
+# WMODE=${WANDB_MODE:-online}
+# MIX=simulation/data/rope/rope_final_mix_19k.h5
+# MIXU=simulation/data/rope/rope_final_mix_u_20k.h5
+
+# [ -f "$MIX" ]  || { echo "MISSING $MIX";  exit 1; }
+# [ -f "$MIXU" ] || { echo "MISSING $MIXU"; exit 1; }
+# mkdir -p training/runs
+
+# # --- choose dataloading by free RAM (cache-pixels needs ~80 GB) ---
+# FREE_GB=$(free -g 2>/dev/null | awk '/^Mem:/{print $7}')
+# FREE_GB=${FREE_GB:-0}
+# if [ "$FREE_GB" -ge 85 ]; then
+#   CACHE="--cache-pixels --num-workers 8"
+# else
+#   CACHE="--num-workers 12"
+# fi
+# echo "=== free RAM ${FREE_GB} GB -> dataloading: $CACHE ==="
+# echo "=== GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1) ==="
+# echo "=== steps=$STEPS save_every=$SAVE_EVERY wandb=$WMODE ==="
+
+# COMMON="--steps $STEPS --batch-size 128 --lr 5e-5 --lr-schedule constant --warmup-steps 0 \
+#  --weight-decay 0.001 --grad-clip 1.0 --seed 3072 --img-size 128 --patch-size 16 \
+#  --history-size 3 --num-preds 1 --frameskip 1 --predictor-depth 6 --predictor-heads 16 \
+#  --predictor-dim-head 64 --predictor-dropout 0.1 --sigreg-weight 0.09 --precision bf16 \
+#  $CACHE --save-every $SAVE_EVERY --log-every 50 \
+#  --wandb --wandb-entity 231n-project --wandb-project lewm-softgym --wandb-mode $WMODE"
+
+# run () {  # $1=run-name $2=data ; rest=extra flags
+#   local name=$1 data=$2; shift 2
+#   if [ -f "training/runs/$name/ckpt_final.pt" ]; then
+#     echo "=== [$(date +%H:%M:%S)] SKIP $name (ckpt_final.pt exists) ==="; return 0
+#   fi
+#   echo "=== [$(date +%H:%M:%S)] START $name ==="
+#   local t0=$(date +%s)
+#   $PY training/train.py --data "$data" --run-name "$name" --wandb-name "$name" \
+#       --wandb-tags rope,final,$name $COMMON "$@" \
+#       > "training/runs/${name}_train.log" 2>&1
+#   local rc=$?
+#   echo "=== [$(date +%H:%M:%S)] END $name rc=$rc ($(( ($(date +%s)-t0)/60 )) min) ==="
+#   [ $rc -ne 0 ] && echo "!!! $name FAILED — see training/runs/${name}_train.log (continuing)"
+#   return 0
+# }
+
+# run mix19k_base       "$MIX"  --embed-dim 192 --use-proprio
+# run mix19k_d384       "$MIX"  --embed-dim 384 --use-proprio
+# run mix19k_aux        "$MIX"  --embed-dim 192 --use-proprio --aux-state-weight 0.5
+# run mix19k_noproprio  "$MIX"  --embed-dim 192
+# run mix20k_u          "$MIXU" --embed-dim 192 --use-proprio
+
+# echo "=== ALL RUNS DONE $(date) ==="
+# ls -1 training/runs/*/ckpt_final.pt 2>/dev/null

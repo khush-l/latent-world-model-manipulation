@@ -244,11 +244,16 @@ class SIGReg(nn.Module):
 
 class JEPA(nn.Module):
     def __init__(self, encoder, predictor, action_encoder, projector=None, pred_proj=None,
-                 proprio_encoder=None):
+                 proprio_encoder=None, state_head=None):
         super().__init__()
         self.encoder = encoder
         self.predictor = predictor
         self.action_encoder = action_encoder
+        # Optional auxiliary head: predicts the low-dim ground-truth rope/picker
+        # state from `emb`, used ONLY during training to force the pixel latent to
+        # retain rope geometry (decode grids showed `emb` loses coiled-shape
+        # detail). Not used at plan time.
+        self.state_head = state_head
         # Optional proprio encoder. When present, proprioception (picker xyz +
         # grip) is fused into the predictor's *conditioning* — NOT into `emb`
         # (the goal-matched, SIGReg-regularized pixel latent). This gives the
@@ -305,6 +310,8 @@ def build_lewm(
     use_proprio: bool = False,
     proj_hidden: int = 2048,
     use_bn_proj: bool = False,
+    
+    state_dim: int = 0,        # >0 enables the auxiliary state-prediction head
 ):
     encoder = ViTTiny(
         img_size=img_size, patch_size=patch_size,
@@ -323,12 +330,15 @@ def build_lewm(
     projector = MLP(embed_dim, proj_hidden, embed_dim, use_bn=use_bn_proj)
     pred_proj = MLP(embed_dim, proj_hidden, embed_dim, use_bn=use_bn_proj)
     proprio_encoder = Embedder(input_dim=proprio_dim, emb_dim=embed_dim) if use_proprio else None
+    # Auxiliary state-prediction head (train-time only): emb (D) -> rope/picker state.
+    state_head = MLP(embed_dim, proj_hidden, state_dim) if state_dim and state_dim > 0 else None
     return JEPA(encoder, predictor, action_encoder, projector, pred_proj,
-                proprio_encoder=proprio_encoder)
+                proprio_encoder=proprio_encoder, state_head=state_head)
 
 
 def lewm_forward(model: JEPA, batch: dict, history_size: int, num_preds: int,
-                 sigreg: Optional[SIGReg] = None, sigreg_weight: float = 0.09):
+                 sigreg: Optional[SIGReg] = None, sigreg_weight: float = 0.09,
+                 state_weight: float = 0.0):
     """Mirrors le-wm-main/train.py:lejepa_forward."""
     batch["action"] = torch.nan_to_num(batch["action"], 0.0)
     if "proprio" in batch:
@@ -350,12 +360,24 @@ def lewm_forward(model: JEPA, batch: dict, history_size: int, num_preds: int,
         sig_loss = torch.zeros((), device=pred_loss.device)
         loss = pred_loss
 
+    # Auxiliary state-prediction loss (train-time only): force `emb` to retain
+    # rope geometry by regressing the low-dim ground-truth state from every
+    # frame's latent. Predicting from emb (the goal-matched latent) sharpens the
+    # representation MPC plans in.
+    state_loss = torch.zeros((), device=pred_loss.device)
+    if state_weight > 0.0 and model.state_head is not None and "state" in batch:
+        state_tgt = torch.nan_to_num(batch["state"].float(), 0.0)   # (B, T, S)
+        state_pred = model.state_head(emb)                          # (B, T, S)
+        state_loss = (state_pred - state_tgt).pow(2).mean()
+        loss = loss + state_weight * state_loss
+
     # Return tensors (not Python floats) so the caller controls when to .item() —
     # avoids per-step GPU syncs on H100. Caller should .item() only when logging.
     return {
         "loss": loss,
         "pred_loss": pred_loss.detach(),
         "sigreg_loss": sig_loss.detach(),
+        "state_loss": state_loss.detach(),
         "emb_std": emb.detach().std(),
         "emb_mean": emb.detach().mean(),
     }

@@ -42,11 +42,15 @@ docker_common_args() {
     -e NVIDIA_DRIVER_CAPABILITIES=all
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
-    -e "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
-    -e "EGL_GPU=${CUDA_VISIBLE_DEVICES:-0}"
     -v "$REPO_ROOT:$CONTAINER_ROOT"
     -w "$SOFTAGENT_ROOT"
   )
+
+  # Pin to a GPU only when CUDA_VISIBLE_DEVICES is explicitly set. Passing an
+  # empty value hides all CUDA devices inside the container.
+  if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    args+=(-e "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES")
+  fi
 
   if [[ -n "${DISPLAY:-}" && -d /mnt/wslg/.X11-unix ]]; then
     args+=(

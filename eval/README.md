@@ -1,1 +1,0 @@
-we can put all our eval scritpts and results in this folder

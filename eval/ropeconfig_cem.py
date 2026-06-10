@@ -1,10 +1,3 @@
-"""Quick CEM-MPC eval on RopeConfiguration (character-shaping) with the LeWM
-cost model. Goal = the env's target-character image. Pure-RGB model.
-
-Run with SOFTGYM_PICKER_COLOR=1,0,0 so the env renders red pickers matching a
-red-trained checkpoint. RopeConfiguration is a DIFFERENT task than the
-RopeFlatten the model trained on, so this is an out-of-distribution probe.
-"""
 import argparse, collections, json, sys
 from pathlib import Path
 import numpy as np, torch, imageio.v2 as iio

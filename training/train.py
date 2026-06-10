@@ -91,6 +91,9 @@ def parse_args():
 
     p.add_argument("--sigreg-weight", type=float, default=0.09)
     p.add_argument("--no-sigreg", action="store_true")
+    p.add_argument("--aux-state-weight", type=float, default=0.0,
+                   help="Weight on the auxiliary state-prediction loss (regress the "
+                        "low-dim rope/picker state from emb, train-time only). 0 = off.")
 
     p.add_argument("--overfit-batches", type=int, default=0,
                    help="If >0, restrict the dataset to N samples and loop indefinitely "
@@ -210,6 +213,7 @@ def main():
         history_size=args.history_size, num_preds=args.num_preds,
         action_dim=args.frameskip * 8,  # 8D = 2 pickers × 4
         proprio_dim=8, use_proprio=args.use_proprio,
+        state_dim=(state_dim if args.aux_state_weight > 0.0 else 0),
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"model params: {n_params/1e6:.2f}M")
@@ -319,6 +323,7 @@ def main():
                 model, batch,
                 history_size=args.history_size, num_preds=args.num_preds,
                 sigreg=sigreg, sigreg_weight=args.sigreg_weight,
+                state_weight=args.aux_state_weight,
             )
         loss = out["loss"]
         optim.zero_grad(set_to_none=True)
@@ -344,6 +349,7 @@ def main():
                 "loss": float(loss.item()),
                 "pred_loss": float(out["pred_loss"].item()),
                 "sigreg_loss": float(out["sigreg_loss"].item()),
+                "state_loss": float(out["state_loss"].item()),
                 "emb_std": float(out["emb_std"].item()),
                 "emb_mean": float(out["emb_mean"].item()),
                 "grad_norm": float(grad_norm_t.item()),
