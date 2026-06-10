@@ -36,6 +36,18 @@ references for project documentation
   - Python bindings/interface layer used by SoftGym, which 
     was used for docker containers in this project
 
+- ACT / LeRobot: https://github.com/huggingface/lerobot
+  - Used only to train and evaluate an ACT imitation-learning baseline on our
+    SoftGym rope datasets for comparison.
+
+- SmolVLA / LeRobot: https://github.com/huggingface/lerobot
+  - Used only to train and evaluate a SmolVLA baseline on the same SoftGym rope
+    datasets for comparison.
+
+- pi0 / OpenPI: https://github.com/Physical-Intelligence/openpi
+  - Used only to run a pi0 LoRA baseline comparison through the OpenPI tooling
+    and a SoftGym-compatible policy server.
+
 
 ## Other Referenced Repositories And Tools
 
@@ -49,4 +61,16 @@ Experiments and development used a mix of personal compute and externally provid
 
 ## AI Use
 
-AI assistance tools, including OpenAI's ChatGPT/Codex and Anthropic's Claude Code, were used during development for tasks such as code drafting, debugging, merge-conflict resolution, experiment script iteration, documentation drafting, and summarizing results. Human project members directed the work, reviewed generated changes, ran experiments, and made the final decisions about architecture choices, training runs, model comparisons, and what to include in the repository. Where AI chat logs and outputs were preserved, they are stored under the `ai_docs` folder. Due to multiple compactions and agent sessions a full log is not stored, but at a high level, AI assistance was used to help draft and revise shell scripts for launching multi-GPU data collection and single-GPU training runs, assist with PyTorch syntax and formatting, quickly generate plotting and charting utilities, prototype implementation ideas, and iterate on experiment orchestration code.
+AI assistance tools, including OpenAI's ChatGPT/Codex, GitHub Copilot, and
+Anthropic's Claude Code, were used during development for tasks such as code
+drafting, debugging, merge-conflict resolution, experiment script iteration,
+documentation drafting, and summarizing results. Human project members directed
+the work, reviewed generated changes, ran experiments, and made the final
+decisions about architecture choices, training runs, model comparisons, and what
+to include in the repository. Where AI chat logs and outputs were preserved,
+they are stored under the `ai_docs` folder. Due to multiple compactions and
+agent sessions a full log is not stored, but at a high level, AI assistance was
+used to help draft and revise shell scripts for launching multi-GPU data
+collection and single-GPU training runs, assist with PyTorch syntax and
+formatting, quickly generate plotting and charting utilities, prototype
+implementation ideas, and iterate on experiment orchestration code.

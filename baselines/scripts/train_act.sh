@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 PY=${PY:-"$REPO_ROOT/training/.venv/bin/python"}
 TRAIN=${TRAIN:-"$REPO_ROOT/training/.venv/bin/lerobot-train"}
 
@@ -19,10 +19,9 @@ NUM_WORKERS=${NUM_WORKERS:-2}
 CHUNK_SIZE=${CHUNK_SIZE:-25}
 
 LOG_DIR=${LOG_DIR:-"$REPO_ROOT/baselines/logs"}
-PLOT_DIR=${PLOT_DIR:-"$REPO_ROOT/baselines/results/rope_cem_final"}
 ACT_LOG=${ACT_LOG:-"$LOG_DIR/train_${ACT_RUN_NAME}.log"}
 
-mkdir -p "$LOG_DIR" "$PLOT_DIR"
+mkdir -p "$LOG_DIR"
 cd "$REPO_ROOT"
 
 if [[ ! -x "$TRAIN" ]]; then
@@ -36,7 +35,7 @@ if [[ ! -d "$DATASET_ROOT" ]]; then
     exit 2
   fi
   echo "[$(date -Is)] Converting $INPUT_H5 to LeRobot dataset $DATASET_ROOT"
-  "$PY" baselines/softgym_hdf5_to_lerobot.py \
+  "$PY" baselines/scripts/convert_lerobot.py \
     --input "$INPUT_H5" \
     --output-root "$DATASET_ROOT" \
     --repo-id "$DATASET_REPO" \
@@ -64,12 +63,6 @@ echo "[$(date -Is)] Training ACT run=$ACT_RUN_NAME dataset=$DATASET_REPO"
   --log_freq=50 \
   --wandb.enable=false \
   2>&1 | tee "$ACT_LOG"
-
-echo "[$(date -Is)] Plotting ACT metrics"
-"$PY" baselines/plot_lerobot_metrics.py "$ACT_LOG" \
-  --run-name "$ACT_RUN_NAME" \
-  --output "$PLOT_DIR/${ACT_RUN_NAME}_charts.png" \
-  2>&1 | tee "$LOG_DIR/plot_${ACT_RUN_NAME}.log"
 
 echo "[$(date -Is)] ACT training finished."
 echo "ACT_CHECKPOINT=$ACT_OUT/checkpoints/$(printf '%06d' "$ACT_STEPS")/pretrained_model"

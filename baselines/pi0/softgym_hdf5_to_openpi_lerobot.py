@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert a SoftGym HDF5 dataset to an OpenPI-friendly LeRobot dataset.
 
-This is separate from `baselines/softgym_hdf5_to_lerobot.py` because OpenPI
+This is separate from `baselines/scripts/convert_lerobot.py` because OpenPI
 training needs keys that are consumed by a SoftGym-specific OpenPI transform:
 
   observation.images.front  <- pixels[t]
@@ -160,4 +160,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

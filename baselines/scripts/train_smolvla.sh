@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 PY=${PY:-"$REPO_ROOT/training/.venv/bin/python"}
 TRAIN=${TRAIN:-"$REPO_ROOT/training/.venv/bin/lerobot-train"}
 
@@ -34,7 +34,7 @@ cd "$REPO_ROOT"
 
 if [[ ! -d "$DATASET_ROOT" ]]; then
   echo "[$(date -Is)] Converting $INPUT_H5 to LeRobot dataset $DATASET_ROOT"
-  "$PY" baselines/softgym_hdf5_to_lerobot.py \
+  "$PY" baselines/scripts/convert_lerobot.py \
     --input "$INPUT_H5" \
     --output-root "$DATASET_ROOT" \
     --repo-id "$DATASET_REPO" \

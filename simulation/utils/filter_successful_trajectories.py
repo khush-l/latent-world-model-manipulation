@@ -3,7 +3,7 @@
 
 This is meant for ACT/SmolVLA imitation baselines: collect a larger pool of
 scripted candidates, keep the high-success episodes, then convert the filtered
-folder with npz_to_hdf5.py and softgym_hdf5_to_lerobot.py.
+folder with npz_to_hdf5.py and baselines/scripts/convert_lerobot.py.
 """
 
 from __future__ import annotations
