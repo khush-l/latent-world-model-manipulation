@@ -45,7 +45,7 @@ references for project documentation
     datasets for comparison.
 
 - pi0 / OpenPI: https://github.com/Physical-Intelligence/openpi
-  - Used only to run a pi0 LoRA baseline comparison through the OpenPI tooling
+  - Used to run a pi0 LoRA baseline comparison through the OpenPI tooling
     and a SoftGym-compatible policy server.
 
 
