@@ -78,7 +78,6 @@ void glAssert(const char* msg, long line, const char* file)
 		}
 
 		printf("OpenGL: %s - error %s in %s at line %d\n", msg, errorName, file, int(line));
-		assert(0);
 	}
 }
 

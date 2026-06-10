@@ -7,6 +7,8 @@ BASE_IMAGE=${SOFTGYM_LOCAL_IMAGE:-softgym-local:py36-cuda92}
 IMAGE=${SOFTAGENT_LOCAL_IMAGE:-softgym-softagent:py36-cuda92}
 CONTAINER_ROOT=/workspace/softgym
 SOFTAGENT_ROOT=$CONTAINER_ROOT/softagent
+SOFTGYM_USE_WSLG_GL=${SOFTGYM_USE_WSLG_GL:-0}
+SOFTGYM_SOFTWARE_GL=${SOFTGYM_SOFTWARE_GL:-1}
 
 usage() {
   cat <<'USAGE'
@@ -36,17 +38,65 @@ docker_common_args() {
   local args=(
     --rm
     --gpus all
+    -e NVIDIA_VISIBLE_DEVICES=all
+    -e NVIDIA_DRIVER_CAPABILITIES=all
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
+    -e "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
+    -e "EGL_GPU=${CUDA_VISIBLE_DEVICES:-0}"
     -v "$REPO_ROOT:$CONTAINER_ROOT"
     -w "$SOFTAGENT_ROOT"
   )
 
-  if [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
+  if [[ -n "${DISPLAY:-}" && -d /mnt/wslg/.X11-unix ]]; then
+    args+=(
+      -v /mnt/wslg/.X11-unix:/tmp/.X11-unix
+      -e "DISPLAY=$DISPLAY"
+      -e QT_X11_NO_MITSHM=1
+    )
+  elif [[ -n "${DISPLAY:-}" && -d /tmp/.X11-unix ]]; then
     args+=(
       -v /tmp/.X11-unix:/tmp/.X11-unix
       -e "DISPLAY=$DISPLAY"
       -e QT_X11_NO_MITSHM=1
+    )
+  fi
+
+  if [[ "$SOFTGYM_SOFTWARE_GL" == "1" ]]; then
+    args+=(
+      -e LIBGL_ALWAYS_SOFTWARE=1
+      -e MESA_LOADER_DRIVER_OVERRIDE=swrast
+      -e MESA_GL_VERSION_OVERRIDE=${MESA_GL_VERSION_OVERRIDE:-4.5}
+      -e MESA_GLSL_VERSION_OVERRIDE=${MESA_GLSL_VERSION_OVERRIDE:-450}
+      -e SOFTGYM_DISABLE_INTEROP=1
+    )
+  fi
+
+  if [[ -e /dev/dxg ]]; then
+    args+=(--device /dev/dxg)
+  fi
+
+  if [[ -d /mnt/wslg ]]; then
+    args+=(
+      -v /mnt/wslg:/mnt/wslg
+      -e "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
+      -e XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir
+      -e "PULSE_SERVER=${PULSE_SERVER:-}"
+    )
+  fi
+
+  local wslg_gl_path=/mnt/wslg/distro/usr/lib/x86_64-linux-gnu
+  if [[ "$SOFTGYM_USE_WSLG_GL" == "1" && -d "$wslg_gl_path" ]]; then
+    args+=(
+      -e "LIBGL_DRIVERS_PATH=$wslg_gl_path/dri"
+      -e "__EGL_VENDOR_LIBRARY_DIRS=$wslg_gl_path/glvnd/egl_vendor.d"
+    )
+  fi
+
+  if [[ -d /usr/lib/wsl ]]; then
+    args+=(
+      -v /usr/lib/wsl:/usr/lib/wsl:ro
+      -e "LD_LIBRARY_PATH=/usr/lib/wsl/lib:${LD_LIBRARY_PATH:-}"
     )
   fi
 

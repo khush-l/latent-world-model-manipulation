@@ -73,8 +73,8 @@ def parse_args():
     p.add_argument("--grad-clip", type=float, default=1.0)
     p.add_argument("--seed", type=int, default=3072)
 
-    p.add_argument("--img-size", type=int, default=224)
-    p.add_argument("--patch-size", type=int, default=14)
+    p.add_argument("--img-size", type=int, default=128)   # project data is 128px (was 224, a generic ViT default)
+    p.add_argument("--patch-size", type=int, default=16)   # all runs use 16 -> 64 tokens (was 14, a generic ViT default)
     p.add_argument("--embed-dim", type=int, default=192)
     p.add_argument("--history-size", type=int, default=3)
     p.add_argument("--num-preds", type=int, default=1)

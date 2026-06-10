@@ -1,4 +1,5 @@
 import abc
+import os
 import numpy as np
 from gym.spaces import Box
 from softgym.utils.misc import rotation_2d_around_center, extend_along_center
@@ -80,6 +81,20 @@ class Picker(ActionToolBase):
             pyflex.add_sphere(self.picker_radius, picker_pos, [1, 0, 0, 0])
         pos = pyflex.get_shape_states()  # Need to call this to update the shape collision
         pyflex.set_shape_states(pos)
+
+        # Optional: recolor the picker shapes (e.g. SOFTGYM_PICKER_COLOR="1,0,0"
+        # for red) so they're visually salient in the RGB observation. Off by
+        # default — the gray-picker datasets/models are unaffected. Sets the
+        # global shape color; in RopeFlatten the pickers are the only shapes.
+        _picker_color = os.environ.get("SOFTGYM_PICKER_COLOR", "").strip()
+        if _picker_color and hasattr(pyflex, "set_shape_color"):
+            try:
+                rgb = np.array([float(c) for c in _picker_color.split(",")][:3],
+                               dtype=np.float32)
+                pyflex.set_shape_color(rgb)
+            except Exception as e:  # noqa: BLE001 — never break reset over a recolor
+                print("[picker recolor] ignoring SOFTGYM_PICKER_COLOR=%r: %s"
+                      % (_picker_color, e))
 
         self.picked_particles = [None] * self.num_picker
         shape_state = np.array(pyflex.get_shape_states()).reshape(-1, 14)
