@@ -83,7 +83,7 @@ action + 8-dim proprioception + 15-dim privileged state (auxiliary loss only).
 | Manipulative heuristic | 5,000 | 0.448 | curls, folds, interior grasps |
 
 Oracle CEM collection ran across 3 nodes / 24 GPUs / 144 vCPUs. Formats are documented in
-[`ai_docs/DATA_FORMAT.md`](ai_docs/DATA_FORMAT.md). The dataset itself is not in this repo (too large); open an issue if you want it.
+[`docs/DATA_FORMAT.md`](docs/DATA_FORMAT.md). The dataset itself is not in this repo (too large); open an issue if you want it.
 
 ## Repository layout
 
@@ -92,8 +92,7 @@ training/      LeWM world model: model.py, dataset.py, train.py, ablation sweeps
 eval/          Latent-MPC: mpc_runner.py, CEM solvers, latent cost, goal sampling, SoftGym env client
 baselines/     ACT / SmolVLA (LeRobot) and π0 LoRA (openpi) training + eval, data conversion, policy server
 simulation/    SoftGym + PyFlex + SoftAgent (vendored), Docker, trajectory collection scripts
-ai_docs/       Architecture notes and data-format spec
-docs/figures/  Figures from the paper
+docs/          Paper figures and the trajectory data-format spec
 ```
 
 ## Quickstart
